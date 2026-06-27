@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Claude · 视觉设计规范 v2</title>
+<style>
+  :root {
+    /* 字体 */
+    --font-sans: "Inter", "PingFang SC", "苹方", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Source Han Serif SC", "思源宋体", "Songti SC", Georgia, "Times New Roman", serif;
+    --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, "Courier New", monospace;
+
+    /* 文字色阶 */
+    --color-text-primary: #141413;
+    --color-text-secondary: #5E5D59;
+    --color-text-tertiary: #87867F;
+    --color-text-quaternary: #B0AEA5;
+    --color-text-success: #4A7C59;
+    --color-text-danger: #B85450;
+
+    /* 背景与边线 */
+    --color-background-primary: #FAF9F5;
+    --color-background-secondary: #F0EEE6;
+    --color-border-tertiary: rgba(20, 20, 19, 0.10);
+
+    /* 圆角 token */
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+
+    /* 品牌色 */
+    --clay: #CC785C;
+    --peach: #EBC9B7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 32px 48px 96px;
+  }
+  /* sr-only 不要显示 */
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* code 默认样式 */
+  code {
+    background: var(--color-background-secondary);
+    padding: 1px 5px;
+    border-radius: var(--border-radius-sm);
+  }
+  /* table 让它好看一点 */
+  table { width: 100%; }
+  /* 让滚动条不那么扎眼 */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h2 class="sr-only">Claude 博客页的中文视觉设计规范 v2 — 基于 claude.com/blog 实际页面像素级测量,涵盖配色、字号梯度、12 列栅格、布局拓扑、组件精确尺寸、间距 token 与中文化落地注意点。</h2>
+
+<div style="padding: 1.5rem 0;">
+
+<!-- 标题 -->
+<div style="margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 0.5px solid var(--color-border-tertiary);">
+  <p style="font-family: var(--font-serif); font-size: 26px; font-weight: 500; margin: 0 0 4px; letter-spacing: -0.5px;">Claude · 视觉设计规范 v2</p>
+  <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0;">像素级测量版 · 12 列栅格 · 居中正文 + 远处 sidebar · 出版物比例</p>
+</div>
+
+<!-- 01 栅格体系 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">01 — 栅格体系</p>
+
+<div style="background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-bottom: 1rem;">
+  <p style="font-size: 12px; color: var(--color-text-tertiary); margin: 0 0 12px; font-family: var(--font-mono); letter-spacing: 0.5px;">CONTAINER · max-width 1440px · 居中</p>
+  <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-bottom: 12px;">
+    <div style="height: 36px; background: #F0EEE6; border-radius: 2px;"></div>
+    <div style="height: 36px; background: #F0EEE6; border-radius: 2px;"></div>
+    <div style="height: 36px; background: #F0EEE6; border-radius: 2px;"></div>
+    <div style="height: 36px; background: #F0EEE6; border-radius: 2px;"></div>
+    <div style="height: 36px; background: #E8C7AB; border-radius: 2px; grid-column: span 4;"></div>
+    <div style="height: 36px; background: #F0EEE6; border-radius: 2px; grid-column: span 2;"></div>
+    <div style="height: 36px; background: #1F1E1D; border-radius: 2px; grid-column: span 2;"></div>
+  </div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; font-size: 12px;">
+    <div>
+      <p style="color: var(--color-text-tertiary); margin: 0 0 2px; font-family: var(--font-mono);">列数 / 列宽</p>
+      <p style="margin: 0; font-family: var(--font-mono);">12 cols · 90.66px</p>
+    </div>
+    <div>
+      <p style="color: var(--color-text-tertiary); margin: 0 0 2px; font-family: var(--font-mono);">列间距</p>
+      <p style="margin: 0; font-family: var(--font-mono);">gap 32px</p>
+    </div>
+    <div>
+      <p style="color: var(--color-text-tertiary); margin: 0 0 2px; font-family: var(--font-mono);">外边距</p>
+      <p style="margin: 0; font-family: var(--font-mono);">≥ 122px @ 1683+</p>
+    </div>
+  </div>
+</div>
+
+<p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 2rem; line-height: 1.7;">关键不是栅格本身,而是<strong style="color: var(--color-text-primary); font-weight: 500;">正文不"占用"全部 12 列</strong>。正文固定 640px(约 7 列)居中,右侧约 2 列留给 meta sidebar,左侧约 3 列留白。这种"偏轴"是出版物气质的来源。</p>
+
+<!-- 02 布局拓扑 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">02 — 布局拓扑</p>
+
+<div style="background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-bottom: 1rem; position: relative;">
+  <div style="position: relative; height: 220px; background: #FAF9F5; border-radius: 8px; overflow: hidden;">
+    <div style="position: absolute; left: 0; right: 0; top: 0; height: 32px; background: #1F1E1D; opacity: 0.04;"></div>
+    <p style="position: absolute; left: 14px; top: 10px; font-size: 10px; color: var(--color-text-tertiary); font-family: var(--font-mono); margin: 0;">NAV · h 84px</p>
+
+    <div style="position: absolute; left: 28%; top: 50px; width: 44%; height: 36px; background: var(--peach, #E8C7AB); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #141413; font-family: var(--font-mono);">HERO ICON 192</div>
+
+    <div style="position: absolute; left: 28%; top: 96px; width: 44%; height: 50px; background: #1F1E1D; opacity: 0.85; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #FAF9F5; font-family: var(--font-mono);">H1 · 52 / 1.2 · width 640</div>
+
+    <div style="position: absolute; left: 28%; top: 154px; width: 44%; height: 14px; background: #87867F; border-radius: 2px;"></div>
+    <div style="position: absolute; left: 28%; top: 174px; width: 38%; height: 14px; background: #87867F; border-radius: 2px;"></div>
+    <p style="position: absolute; left: 28%; top: 195px; font-size: 10px; color: var(--color-text-tertiary); font-family: var(--font-mono); margin: 0;">DEK · 23 / 34.5</p>
+
+    <div style="position: absolute; right: 7.3%; top: 50px; width: 13%; height: 156px; background: #FFFFFF; border: 0.5px dashed var(--color-border-tertiary); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--color-text-tertiary); font-family: var(--font-mono); padding: 4px; text-align: center;">META<br/>213 × 260</div>
+  </div>
+  <p style="font-size: 12px; color: var(--color-text-secondary); margin: 12px 0 0; line-height: 1.6;">正文(深色块)居中 — meta(虚线框)挂在 container 右缘 — 二者之间留 ~186px 空气。这种"远距 sidebar"不能用 grid 直接 hug,要让 sidebar 用 <code style="font-family: var(--font-mono); font-size: 11px;">grid-column</code> 跳到固定列。</p>
+</div>
+
+<p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 2rem; line-height: 1.7;">视口宽 1683 实测:正文 x=522 width=640 / meta x=1348 width=213 / 二者间距 186px / 二者居中线不一致(正文 842 vs meta 1455)。<strong style="color: var(--color-text-primary); font-weight: 500;">这不是 sidebar layout,是 island layout</strong>。</p>
+
+<!-- 03 配色 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">03 — 色彩</p>
+
+<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 1rem;">
+  <div>
+    <div style="height: 64px; background: #FAF9F5; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">奶油底</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#FAF9F5</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #F0EEE6; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">米色面</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#F0EEE6</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #FFFFFF; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">卡片白</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#FFFFFF</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #1F1E1D; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">深炭面</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#1F1E1D</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #141413; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">墨黑字</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#141413</p>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 1rem;">
+  <div>
+    <div style="height: 64px; background: #5E5D59; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">次级字</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#5E5D59</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #87867F; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">三级字</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#87867F</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #B0AEA5; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">弱化灰</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#B0AEA5</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #CC785C; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">Clay · 品牌</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#CC785C</p>
+  </div>
+  <div>
+    <div style="height: 64px; background: #EBC9B7; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);"></div>
+    <p style="font-size: 11px; font-weight: 500; margin: 6px 0 0;">桃米 · 实测</p>
+    <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0; font-family: var(--font-mono);">#EBC9B7</p>
+  </div>
+</div>
+
+<p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 2rem; line-height: 1.7;">桃米色 <code style="font-family: var(--font-mono); font-size: 12px;">#EBC9B7</code> 是 hero icon 实际取色,比常见"奶油杏"略冷。</p>
+
+<!-- 04 字号梯度 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">04 — 字号梯度(实测)</p>
+
+<div style="background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-bottom: 1rem; overflow-x: auto;">
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <thead>
+      <tr style="border-bottom: 0.5px solid var(--color-border-tertiary);">
+        <th style="text-align: left; padding: 8px 12px 8px 0; font-size: 11px; letter-spacing: 0.5px; color: var(--color-text-tertiary); font-weight: 500; font-family: var(--font-mono);">角色</th>
+        <th style="text-align: left; padding: 8px 12px; font-size: 11px; letter-spacing: 0.5px; color: var(--color-text-tertiary); font-weight: 500; font-family: var(--font-mono);">字号</th>
+        <th style="text-align: left; padding: 8px 12px; font-size: 11px; letter-spacing: 0.5px; color: var(--color-text-tertiary); font-weight: 500; font-family: var(--font-mono);">行高</th>
+        <th style="text-align: left; padding: 8px 12px; font-size: 11px; letter-spacing: 0.5px; color: var(--color-text-tertiary); font-weight: 500; font-family: var(--font-mono);">字重</th>
+        <th style="text-align: left; padding: 8px 12px; font-size: 11px; letter-spacing: 0.5px; color: var(--color-text-tertiary); font-weight: 500; font-family: var(--font-mono);">字体</th>
+        <th style="text-align: left; padding: 8px 0 8px 12px; font-size: 11px; letter-spacing: 0.5px; color: var(--color-text-tertiary); font-weight: 500; font-family: var(--font-mono);">用途</th>
+      </tr>
+    </thead>
+    <tbody style="line-height: 1.5;">
+      <tr style="border-bottom: 0.5px solid var(--color-border-tertiary);">
+        <td style="padding: 10px 12px 10px 0;">H1</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">52</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">62.4 (1.2)</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">500</td>
+        <td style="padding: 10px 12px;">Serif</td>
+        <td style="padding: 10px 0 10px 12px; color: var(--color-text-secondary);">文章主标题</td>
+      </tr>
+      <tr style="border-bottom: 0.5px solid var(--color-border-tertiary);">
+        <td style="padding: 10px 12px 10px 0;">Dek</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">23</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">34.5 (1.5)</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">400</td>
+        <td style="padding: 10px 12px;">Sans</td>
+        <td style="padding: 10px 0 10px 12px; color: var(--color-text-secondary);">摘要 / 副标题</td>
+      </tr>
+      <tr style="border-bottom: 0.5px solid var(--color-border-tertiary);">
+        <td style="padding: 10px 12px 10px 0;">H2</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">25</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">30 (1.2)</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">500</td>
+        <td style="padding: 10px 12px;">Serif</td>
+        <td style="padding: 10px 0 10px 12px; color: var(--color-text-secondary);">章节标题(并不大!)</td>
+      </tr>
+      <tr style="border-bottom: 0.5px solid var(--color-border-tertiary);">
+        <td style="padding: 10px 12px 10px 0;">Body</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">20</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">32 (1.6)</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">400</td>
+        <td style="padding: 10px 12px;">Sans</td>
+        <td style="padding: 10px 0 10px 12px; color: var(--color-text-secondary);">正文段落 · 段间距 32</td>
+      </tr>
+      <tr style="border-bottom: 0.5px solid var(--color-border-tertiary);">
+        <td style="padding: 10px 12px 10px 0;">UI</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">15</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">22 (1.5)</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">400–500</td>
+        <td style="padding: 10px 12px;">Sans</td>
+        <td style="padding: 10px 0 10px 12px; color: var(--color-text-secondary);">按钮 / 导航 / meta 主值</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 12px 10px 0;">Caption</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">11–12</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">1.5</td>
+        <td style="padding: 10px 12px; font-family: var(--font-mono);">400</td>
+        <td style="padding: 10px 12px;">Sans</td>
+        <td style="padding: 10px 0 10px 12px; color: var(--color-text-secondary);">meta label · 灰字</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 2rem; line-height: 1.7;">关键反直觉点:H2 只比 body 大 5px,靠"衬线 vs 无衬线"和留白拉开层级,<strong style="color: var(--color-text-primary); font-weight: 500;">不靠字号</strong>。这避免了"H1 巨大 → H2 也大 → 整页失衡"。</p>
+
+<!-- 05 间距 token -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">05 — 间距 token(实测)</p>
+
+<div style="background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-bottom: 2rem;">
+  <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px 16px; font-size: 13px; line-height: 1.6;">
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">8</p>
+    <p style="margin: 0;">小间隙 — 行内元素 / icon-text gap</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">16</p>
+    <p style="margin: 0;">紧凑间距 — meta item 内部 label↔value</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">24</p>
+    <p style="margin: 0;">默认间距 — Dek 段落间</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">32</p>
+    <p style="margin: 0;"><strong style="font-weight: 500;">基准间距</strong> — 正文段间(<code style="font-family: var(--font-mono); font-size: 12px;">p { margin-bottom: 32px }</code>)、grid gap</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">48</p>
+    <p style="margin: 0;">Hero icon ↓ H1 的间距</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">56–64</p>
+    <p style="margin: 0;">章节间距(H2 之前)</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">84</p>
+    <p style="margin: 0;">Nav 高度(padding 24/24 + 36 控件)</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">122+</p>
+    <p style="margin: 0;">视口外边距 (在 1683+ 视口)</p>
+    <p style="margin: 0; font-family: var(--font-mono); color: var(--color-text-tertiary);">186</p>
+    <p style="margin: 0;">正文 ↔ Meta sidebar 横向空气</p>
+  </div>
+</div>
+
+<!-- 06 组件精确尺寸 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">06 — 组件精确尺寸</p>
+
+<!-- Hero icon -->
+<div style="display: flex; align-items: center; gap: 24px; margin-bottom: 16px; background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 20px;">
+  <div style="width: 96px; height: 96px; background: #EBC9B7; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+    <svg width="40" height="40" viewBox="0 0 32 32" fill="none" stroke="#141413" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 L19 4 L23 8 L23 26 L9 26 Z"/><path d="M19 4 L19 8 L23 8"/></svg>
+  </div>
+  <div>
+    <p style="font-size: 14px; font-weight: 500; margin: 0 0 4px;">Hero Icon · <span style="font-family: var(--font-mono); font-size: 13px;">192 × 192 · radius 32</span></p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0 0 4px; line-height: 1.6;">这是规范里最容易做小的元素。Claude 的 hero icon 接近占 2 列(192px ≈ 90.66×2 + 32×0)。</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">缩略图版本:<span style="font-family: var(--font-mono);">88 × 88 · radius 18</span>(文章卡片)。<strong style="font-weight: 500; color: var(--color-text-primary);">不要混用</strong>。</p>
+  </div>
+</div>
+
+<!-- 按钮 -->
+<div style="background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 20px; margin-bottom: 16px;">
+  <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+    <button style="background: #1F1E1D; color: #FAF9F5; border: none; border-radius: 8px; padding: 7px 16px; font-size: 15px; font-weight: 400; font-family: inherit; height: 36px; cursor: pointer;">Try Claude</button>
+    <button style="background: transparent; color: #141413; border: 0.5px solid #141413; border-radius: 8px; padding: 7px 16px; font-size: 15px; font-weight: 400; font-family: inherit; height: 36px; cursor: pointer;">Contact sales</button>
+    <button style="background: transparent; color: #5E5D59; border: none; padding: 7px 14px; font-size: 15px; font-weight: 400; font-family: inherit; height: 36px; cursor: pointer;">Login</button>
+  </div>
+  <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6; font-family: var(--font-mono);">height 36 · radius 8 · padding 7×16 · font 15/400</p>
+</div>
+
+<!-- meta sidebar -->
+<div style="display: grid; grid-template-columns: 1fr 213px; gap: 24px; margin-bottom: 16px; background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 20px;">
+  <div>
+    <p style="font-size: 14px; font-weight: 500; margin: 0 0 6px;">Meta Sidebar · <span style="font-family: var(--font-mono); font-size: 13px;">213 × 260</span></p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">是一组 UL · flex column · 每项 ~52px 高 · label 11px caption + value 15px。<strong style="font-weight: 500; color: var(--color-text-primary);">不带 padding,不带边框,不带背景</strong>。靠位置和留白存在。</p>
+  </div>
+  <div style="font-size: 13px;">
+    <div style="margin-bottom: 16px;">
+      <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0 0 4px;">Category</p>
+      <p style="margin: 0; text-decoration: underline; text-decoration-thickness: 0.5px; text-underline-offset: 3px;">Claude Code</p>
+    </div>
+    <div style="margin-bottom: 16px;">
+      <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0 0 4px;">Date</p>
+      <p style="margin: 0;">May 20, 2026</p>
+    </div>
+    <div>
+      <p style="font-size: 11px; color: var(--color-text-tertiary); margin: 0 0 4px;">Reading time</p>
+      <p style="margin: 0;">5 min</p>
+    </div>
+  </div>
+</div>
+
+<!-- 文章正文宽 -->
+<div style="background: #FFFFFF; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 20px; margin-bottom: 2rem;">
+  <p style="font-size: 14px; font-weight: 500; margin: 0 0 4px;">Article Column · <span style="font-family: var(--font-mono); font-size: 13px;">width 640px · 居中</span></p>
+  <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">不是 <code style="font-family: var(--font-mono); font-size: 11px;">max-width</code>,是固定 640。约 7 列。在 container 内水平居中(中线 ≈ 720),不与 sidebar 共享 grid track。</p>
+</div>
+
+<!-- 07 圆角梯度 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">07 — 圆角梯度(实测)</p>
+
+<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 2rem;">
+  <div style="text-align: center;">
+    <div style="height: 64px; background: #1F1E1D; border-radius: 4px; margin-bottom: 6px;"></div>
+    <p style="font-size: 11px; font-family: var(--font-mono); margin: 0;">4px</p>
+    <p style="font-size: 10px; color: var(--color-text-tertiary); margin: 2px 0 0;">小标签 / 输入框内角</p>
+  </div>
+  <div style="text-align: center;">
+    <div style="height: 64px; background: #1F1E1D; border-radius: 7.5px; margin-bottom: 6px;"></div>
+    <p style="font-size: 11px; font-family: var(--font-mono); margin: 0;">7.5–8px</p>
+    <p style="font-size: 10px; color: var(--color-text-tertiary); margin: 2px 0 0;">按钮</p>
+  </div>
+  <div style="text-align: center;">
+    <div style="height: 64px; background: #1F1E1D; border-radius: 12px; margin-bottom: 6px;"></div>
+    <p style="font-size: 11px; font-family: var(--font-mono); margin: 0;">12px</p>
+    <p style="font-size: 10px; color: var(--color-text-tertiary); margin: 2px 0 0;">引用块 / 小卡片</p>
+  </div>
+  <div style="text-align: center;">
+    <div style="height: 64px; background: #1F1E1D; border-radius: 32px; margin-bottom: 6px;"></div>
+    <p style="font-size: 11px; font-family: var(--font-mono); margin: 0;">32px</p>
+    <p style="font-size: 10px; color: var(--color-text-tertiary); margin: 2px 0 0;">Hero icon</p>
+  </div>
+  <div style="text-align: center;">
+    <div style="height: 64px; background: #1F1E1D; border-radius: 999px; margin-bottom: 6px;"></div>
+    <p style="font-size: 11px; font-family: var(--font-mono); margin: 0;">pill</p>
+    <p style="font-size: 10px; color: var(--color-text-tertiary); margin: 2px 0 0;">tag / chip</p>
+  </div>
+</div>
+
+<!-- 08 设计原则 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">08 — 设计原则</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 2rem;">
+  <div style="border-left: 2px solid #CC785C; padding: 4px 0 4px 12px;">
+    <p style="font-size: 13px; font-weight: 500; margin: 0 0 2px;">正文固定 640,不响应缩放</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">视口变宽,只是周围空气更多;阅读体验不变。</p>
+  </div>
+  <div style="border-left: 2px solid #CC785C; padding: 4px 0 4px 12px;">
+    <p style="font-size: 13px; font-weight: 500; margin: 0 0 2px;">Sidebar 是"岛",不是"列"</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">距正文 ~186px,不参与正文断行决策。</p>
+  </div>
+  <div style="border-left: 2px solid #CC785C; padding: 4px 0 4px 12px;">
+    <p style="font-size: 13px; font-weight: 500; margin: 0 0 2px;">字号层级靠"对比",不靠"倍数"</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">H1 52 → H2 25 → body 20。落差不均,反而稳。</p>
+  </div>
+  <div style="border-left: 2px solid #CC785C; padding: 4px 0 4px 12px;">
+    <p style="font-size: 13px; font-weight: 500; margin: 0 0 2px;">单位间距 = 32</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">段间 32 · 章节 ×2 · grid gap 32 — 一个数撑起全篇。</p>
+  </div>
+  <div style="border-left: 2px solid #CC785C; padding: 4px 0 4px 12px;">
+    <p style="font-size: 13px; font-weight: 500; margin: 0 0 2px;">Hero icon 大且圆</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">192/32 比例,占两列宽。做小会"失重"。</p>
+  </div>
+  <div style="border-left: 2px solid #CC785C; padding: 4px 0 4px 12px;">
+    <p style="font-size: 13px; font-weight: 500; margin: 0 0 2px;">Meta 不带容器</p>
+    <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.6;">没有边框、没有背景、没有 padding 包裹。</p>
+  </div>
+</div>
+
+<!-- 09 中文化注意点 -->
+<p style="font-size: 11px; letter-spacing: 2px; color: var(--color-text-tertiary); margin: 0 0 12px;">09 — 中文化落地注意点</p>
+
+<!-- 注意点 1 -->
+<div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 10px;">
+  <p style="font-size: 14px; font-weight: 500; margin: 0 0 6px;">① H1 字号需要下调</p>
+  <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0; line-height: 1.7;">英文 52px / lh 1.2 看起来"大气",中文同尺寸会"压顶"且断行混乱。<strong style="font-weight: 500; color: var(--color-text-primary);">中文 H1 建议 40–44 / lh 1.3。</strong>正文 20px 保持不变。</p>
+</div>
+
+<!-- 注意点 2 -->
+<div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 10px;">
+  <p style="font-size: 14px; font-weight: 500; margin: 0 0 6px;">② 段落间距从 32 → 28</p>
+  <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0; line-height: 1.7;">中文行高已经放大到 1.75–1.85,段间再 32 会"散"。建议 <code style="font-family: var(--font-mono); font-size: 12px;">p { margin-bottom: 28px }</code>。</p>
+</div>
+
+<!-- 注意点 3 -->
+<div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 10px;">
+  <p style="font-size: 14px; font-weight: 500; margin: 0 0 6px;">③ 正文列宽 640 → 680</p>
+  <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0; line-height: 1.7;">英文 640 ≈ 80 chars,中文 640 ≈ 30 字。30 字一行偏窄,容易破"气"。建议中文用 <strong style="font-weight: 500; color: var(--color-text-primary);">680–720px</strong>(约 34–36 字/行)。</p>
+</div>
+
+<!-- 注意点 4 -->
+<div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 10px;">
+  <p style="font-size: 14px; font-weight: 500; margin: 0 0 6px;">④ Sidebar 在窄屏怎么办</p>
+  <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 6px; line-height: 1.7;">"远距 sidebar"在 ≥ 1280px 视口才成立。窄屏建议:</p>
+  <ul style="font-size: 13px; color: var(--color-text-secondary); margin: 0; padding-left: 20px; line-height: 1.8;">
+    <li>1024–1280px:sidebar 改为 hug,gap 缩到 48–64px</li>
+    <li>≤ 1024px:meta 折叠到 H1 上方,横向 inline</li>
+    <li>≤ 720px:meta 全部进入 hero 区,作为标签链</li>
+  </ul>
+</div>
+
+<!-- 注意点 5 -->
+<div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 16px; margin-bottom: 2rem;">
+  <p style="font-size: 14px; font-weight: 500; margin: 0 0 6px;">⑤ Hero icon 中文场景偏大</p>
+  <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0; line-height: 1.7;">192 在英文里"挑衅且自信",中文阅读者可能觉得"喧宾夺主"。可下调到 <strong style="font-weight: 500; color: var(--color-text-primary);">144 × 144 · radius 24</strong>,保持两列占位比例不变。</p>
+</div>
+
+<!-- 收尾 -->
+<div style="border-top: 0.5px solid var(--color-border-tertiary); padding-top: 1rem;">
+  <p style="font-family: var(--font-serif); font-size: 14px; font-style: italic; color: var(--color-text-secondary); margin: 0; line-height: 1.7;">"规范不是参考,是承诺。640 不是 max-width,是 640。32 不是大约,是 32。"</p>
+</div>
+
+</div>
+
+</body>
+</html>
