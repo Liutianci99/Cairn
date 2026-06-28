@@ -1,0 +1,300 @@
+:root {
+  --accent1: #8aa0ff;
+  --accent2: #b98bff;
+  --mint: #8cdcb5;
+  --hi: #ff8f70;
+  --normal: #8ca1ff;
+  --text: rgba(255, 255, 255, 0.92);
+  --text-dim: rgba(255, 255, 255, 0.45);
+  --track: rgba(255, 255, 255, 0.13);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC",
+    system-ui, sans-serif;
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.panel {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  padding: 8px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  /* Frosted glass is faked from a blurred copy of the wallpaper image (.backdrop):
+     Windows acrylic can't sample Wallpaper Engine's live wallpaper (it only sees
+     the static desktop and goes flat gray), so we blur a known wallpaper image
+     ourselves. The panel itself is transparent; .backdrop holds the blurred
+     image + dark veil. Single rounded rect comes from the window, no CSS border. */
+  background: transparent;
+  overflow: hidden;
+}
+
+/* fine frosted grain over the glass */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* top edge highlight */
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.25),
+    transparent
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* blurred-wallpaper backdrop — the fake-frosted-glass layer */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+.backdrop::before {
+  content: "";
+  position: absolute;
+  inset: -40px; /* bleed so the blur doesn't fade at the edges */
+  background-image: url("./assets/wallpaper.jpg");
+  background-size: cover;
+  background-position: right top;
+  filter: blur(26px) saturate(1.08) brightness(0.82);
+}
+.backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* dark veil for depth + text readability */
+  background: linear-gradient(
+    160deg,
+    rgba(14, 16, 26, 0.4),
+    rgba(10, 12, 20, 0.58)
+  );
+}
+
+/* keep content above the backdrop */
+.draghandle-strip,
+.header,
+.list {
+  position: relative;
+  z-index: 1;
+}
+
+.draghandle-strip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0 10px;
+  cursor: grab;
+  flex-shrink: 0;
+}
+.draghandle-strip:active {
+  cursor: grabbing;
+}
+.draghandle {
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.subtitle {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.add-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.add-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.add-btn:active {
+  transform: scale(0.94);
+}
+
+.list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 3px;
+  margin-right: -3px;
+}
+.list::-webkit-scrollbar {
+  width: 5px;
+}
+.list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.row.completed {
+  opacity: 0.45;
+}
+.row.completed .row-title {
+  text-decoration: line-through;
+}
+
+.row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.row-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.high {
+  background: var(--hi);
+}
+.dot.normal {
+  background: var(--normal);
+}
+.check {
+  color: var(--mint);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.row-title {
+  font-size: 14.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.count {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.node {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+.node:hover {
+  transform: scale(1.25);
+}
+.node.done {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent1), var(--accent2));
+}
+.node.current {
+  border-color: var(--accent1);
+  background: rgba(138, 160, 255, 0.18);
+}
+.node.done.mint {
+  background: var(--mint);
+}
+.conn {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--track);
+}
+.conn.done {
+  background: linear-gradient(90deg, var(--accent1), var(--accent2));
+}
+.conn.done.mint {
+  background: var(--mint);
+}
+
+.grip {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 16px;
+  height: 16px;
+  z-index: 2;
+  cursor: nwse-resize;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cg fill='rgba(255,255,255,0.4)'%3E%3Ccircle cx='12.5' cy='12.5' r='1.3'/%3E%3Ccircle cx='12.5' cy='7.5' r='1.3'/%3E%3Ccircle cx='7.5' cy='12.5' r='1.3'/%3E%3Ccircle cx='12.5' cy='2.5' r='1.3'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.3'/%3E%3Ccircle cx='2.5' cy='12.5' r='1.3'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+}
