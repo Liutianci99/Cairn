@@ -43,6 +43,11 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return n;
 }
 
+const ICON_EDIT =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>';
+const ICON_DELETE =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+
 function buildStepper(p: Project, complete: boolean): HTMLElement {
   const done = doneCount(p);
   const total = p.milestones.length;
@@ -94,6 +99,13 @@ function buildRow(p: Project): HTMLElement {
 
   row.appendChild(top);
   row.appendChild(buildStepper(p, complete));
+
+  // right-click → edit / delete menu
+  row.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, p);
+  });
+
   return row;
 }
 
@@ -132,19 +144,7 @@ function render() {
   const add = el("button", "add-btn", "+");
   add.type = "button";
   add.title = "新建项目";
-  add.addEventListener("click", async () => {
-    try {
-      const created = await invoke<Project>("create_project", {
-        title: "新项目",
-        priority: "normal",
-        milestones: ["节点 1", "节点 2", "节点 3"],
-      });
-      projects.push(created);
-      render();
-    } catch (e) {
-      console.error("create_project failed", e);
-    }
-  });
+  add.addEventListener("click", () => openProjectDialog());
 
   header.appendChild(titles);
   header.appendChild(add);
@@ -168,6 +168,230 @@ function render() {
   });
   app.appendChild(grip);
 }
+
+// ---------- right-click context menu ----------
+function showContextMenu(x: number, y: number, p: Project) {
+  document.querySelectorAll(".ctx-menu").forEach((m) => m.remove());
+
+  const menu = el("div", "ctx-menu");
+  const item = (icon: string, label: string, danger?: boolean) => {
+    const it = el("div", "ctx-item" + (danger ? " danger" : ""));
+    const ico = el("span", "ctx-ico");
+    ico.innerHTML = icon;
+    it.appendChild(ico);
+    it.appendChild(el("span", undefined, label));
+    return it;
+  };
+  const edit = item(ICON_EDIT, "编辑");
+  const del = item(ICON_DELETE, "删除", true);
+  menu.appendChild(edit);
+  menu.appendChild(del);
+  document.body.appendChild(menu);
+
+  // clamp into the viewport
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.min(x, window.innerWidth - r.width - 8) + "px";
+  menu.style.top = Math.min(y, window.innerHeight - r.height - 8) + "px";
+
+  const close = () => {
+    menu.remove();
+    document.removeEventListener("mousedown", onDoc);
+    document.removeEventListener("keydown", onKey);
+  };
+  const onDoc = (e: MouseEvent) => {
+    if (!menu.contains(e.target as Node)) close();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") close();
+  };
+  setTimeout(() => {
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+  }, 0);
+
+  edit.addEventListener("click", () => {
+    close();
+    openProjectDialog(p);
+  });
+  del.addEventListener("click", async () => {
+    close();
+    try {
+      await invoke("delete_project", { id: p.id });
+      projects = projects.filter((x) => x.id !== p.id);
+      render();
+    } catch (e) {
+      console.error("delete_project failed", e);
+    }
+  });
+}
+
+// ---------- create / edit dialog ----------
+function openProjectDialog(existing?: Project) {
+  const isEdit = !!existing;
+  let priority: Priority = existing?.priority ?? "normal";
+  // working node list; existing milestones keep their id so done is preserved
+  const nodes: { id: string | null; title: string }[] = existing
+    ? existing.milestones.map((m) => ({ id: m.id, title: m.title }))
+    : [
+        { id: null, title: "节点 1" },
+        { id: null, title: "节点 2" },
+        { id: null, title: "节点 3" },
+      ];
+
+  const overlay = el("div", "dialog-overlay");
+  const dialog = el("div", "dialog");
+  overlay.appendChild(dialog);
+
+  dialog.appendChild(el("div", "dialog-title", isEdit ? "编辑项目" : "新建项目"));
+
+  // name
+  const nameWrap = el("div", "field");
+  nameWrap.appendChild(el("label", "field-label", "名称"));
+  const nameInput = document.createElement("input");
+  nameInput.className = "text-input";
+  nameInput.type = "text";
+  nameInput.placeholder = "项目名称";
+  nameInput.value = existing?.title ?? "";
+  nameWrap.appendChild(nameInput);
+  dialog.appendChild(nameWrap);
+
+  // priority
+  const prioWrap = el("div", "field");
+  prioWrap.appendChild(el("label", "field-label", "优先级"));
+  const seg = el("div", "seg");
+  const makePill = (val: Priority, label: string) => {
+    const pill = el(
+      "button",
+      "seg-pill " + val + (priority === val ? " active" : ""),
+    );
+    pill.type = "button";
+    pill.appendChild(el("span", "seg-dot " + val));
+    pill.appendChild(el("span", undefined, label));
+    pill.addEventListener("click", () => {
+      priority = val;
+      seg
+        .querySelectorAll(".seg-pill")
+        .forEach((x) => x.classList.remove("active"));
+      pill.classList.add("active");
+    });
+    return pill;
+  };
+  seg.appendChild(makePill("normal", "普通"));
+  seg.appendChild(makePill("high", "重要"));
+  prioWrap.appendChild(seg);
+  dialog.appendChild(prioWrap);
+
+  // node count
+  const countWrap = el("div", "field");
+  countWrap.appendChild(el("label", "field-label", "节点数量"));
+  const stepperRow = el("div", "stepper-row");
+  const minus = el("button", "step-btn", "−");
+  minus.type = "button";
+  const countNum = el("span", "step-num", String(nodes.length));
+  const plus = el("button", "step-btn", "+");
+  plus.type = "button";
+  stepperRow.appendChild(minus);
+  stepperRow.appendChild(countNum);
+  stepperRow.appendChild(plus);
+  countWrap.appendChild(stepperRow);
+  dialog.appendChild(countWrap);
+
+  // node names
+  const namesWrap = el("div", "field");
+  namesWrap.appendChild(el("label", "field-label", "节点命名"));
+  const nodesContainer = el("div", "node-inputs");
+  namesWrap.appendChild(nodesContainer);
+  dialog.appendChild(namesWrap);
+
+  function renderNodes() {
+    countNum.textContent = String(nodes.length);
+    nodesContainer.innerHTML = "";
+    nodes.forEach((n, i) => {
+      const inp = document.createElement("input");
+      inp.className = "text-input";
+      inp.type = "text";
+      inp.placeholder = "节点 " + (i + 1);
+      inp.value = n.title;
+      inp.addEventListener("input", () => {
+        n.title = inp.value;
+      });
+      nodesContainer.appendChild(inp);
+    });
+  }
+  renderNodes();
+
+  minus.addEventListener("click", () => {
+    if (nodes.length > 1) {
+      nodes.pop();
+      renderNodes();
+    }
+  });
+  plus.addEventListener("click", () => {
+    nodes.push({ id: null, title: "" });
+    renderNodes();
+  });
+
+  // actions
+  const actions = el("div", "dialog-actions");
+  const cancel = el("button", "btn-ghost", "取消");
+  cancel.type = "button";
+  const save = el("button", "btn-primary", "保存");
+  save.type = "button";
+  actions.appendChild(cancel);
+  actions.appendChild(save);
+  dialog.appendChild(actions);
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) close();
+  });
+  cancel.addEventListener("click", close);
+
+  save.addEventListener("click", async () => {
+    const title = nameInput.value.trim() || (isEdit ? existing!.title : "新项目");
+    const named = nodes.map((n, i) => ({
+      id: n.id,
+      title: n.title.trim() || "节点 " + (i + 1),
+    }));
+    try {
+      if (isEdit) {
+        const updated = await invoke<Project>("update_project", {
+          id: existing!.id,
+          title,
+          priority,
+          milestones: named,
+        });
+        const idx = projects.findIndex((p) => p.id === updated.id);
+        if (idx >= 0) projects[idx] = updated;
+        else projects.push(updated);
+      } else {
+        const created = await invoke<Project>("create_project", {
+          title,
+          priority,
+          milestones: named.map((n) => n.title),
+        });
+        projects.push(created);
+      }
+      close();
+      render();
+    } catch (e) {
+      console.error("save project failed", e);
+    }
+  });
+
+  document.body.appendChild(overlay);
+  nameInput.focus();
+}
+
+// suppress the default browser context menu app-wide; rows show a custom one
+document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 window.addEventListener("DOMContentLoaded", () => {
   void reload();
