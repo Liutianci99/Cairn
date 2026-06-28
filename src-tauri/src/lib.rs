@@ -75,6 +75,52 @@ fn delete_project(state: tauri::State<'_, Mutex<Connection>>, id: String) -> Res
     db::delete_project(&conn, &id).map_err(|e| e.to_string())
 }
 
+/// Pin the window to the desktop bottom layer (never above other windows). When
+/// `pinned`, the window is non-activating and sits at the bottom of the z-order;
+/// when not, it can come forward and take keyboard focus (needed to type in the
+/// edit dialog).
+#[cfg(target_os = "windows")]
+fn set_desktop_pinned(window: &tauri::WebviewWindow, pinned: bool) {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_BOTTOM, HWND_TOP,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE,
+    };
+    let raw = match window.hwnd() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    let hwnd: HWND = raw.0 as _;
+    unsafe {
+        let mut ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        if pinned {
+            ex |= WS_EX_NOACTIVATE as isize;
+        } else {
+            ex &= !(WS_EX_NOACTIVATE as isize);
+        }
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex);
+        let after = if pinned { HWND_BOTTOM } else { HWND_TOP };
+        SetWindowPos(hwnd, after, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
+/// Toggle the window between desktop-pinned (idle) and forward+focusable (while
+/// the create/edit dialog is open so its text fields can receive keystrokes).
+#[tauri::command]
+fn set_editing(window: tauri::WebviewWindow, editing: bool) {
+    #[cfg(target_os = "windows")]
+    {
+        set_desktop_pinned(&window, !editing);
+        if editing {
+            let _ = window.set_focus();
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, editing);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -88,7 +134,8 @@ pub fn run() {
             create_project,
             set_milestone_done,
             update_project,
-            delete_project
+            delete_project,
+            set_editing
         ])
         .setup(|app| {
             // Open the local SQLite database and hand it to Tauri's managed state
@@ -139,6 +186,11 @@ pub fn run() {
                     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
                 }
             }
+
+            // Desktop widget: sit at the bottom of the z-order, never covering
+            // other windows. The edit dialog temporarily lifts it via set_editing.
+            #[cfg(target_os = "windows")]
+            set_desktop_pinned(&window, true);
 
             Ok(())
         })

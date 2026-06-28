@@ -344,6 +344,8 @@ function openProjectDialog(existing?: Project) {
   const close = () => {
     overlay.remove();
     document.removeEventListener("keydown", onKey);
+    // drop the window back to the desktop bottom layer
+    void invoke("set_editing", { editing: false }).catch(() => {});
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") close();
@@ -386,6 +388,8 @@ function openProjectDialog(existing?: Project) {
     }
   });
 
+  // lift the window forward + make it focusable so the text fields accept input
+  void invoke("set_editing", { editing: true }).catch(() => {});
   document.body.appendChild(overlay);
   nameInput.focus();
 }
