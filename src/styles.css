@@ -193,15 +193,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  margin: 0 -8px;
-  padding: 7px 8px;
-  border-radius: 12px;
-  transition: transform 0.14s ease, box-shadow 0.16s ease, background 0.14s ease;
+  margin: 0 -10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s ease, background 0.18s ease, border-color 0.18s ease;
 }
 .row:hover {
-  background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.08);
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
 }
 .row.completed {
   opacity: 0.45;
