@@ -57,6 +57,24 @@ fn set_milestone_done(
     db::set_milestone_done(&conn, &milestone_id, done).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn update_project(
+    state: tauri::State<'_, Mutex<Connection>>,
+    id: String,
+    title: String,
+    priority: String,
+    milestones: Vec<db::MilestoneInput>,
+) -> Result<db::Project, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::update_project(&conn, &id, &title, &priority, &milestones).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_project(state: tauri::State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::delete_project(&conn, &id).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -68,7 +86,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_projects,
             create_project,
-            set_milestone_done
+            set_milestone_done,
+            update_project,
+            delete_project
         ])
         .setup(|app| {
             // Open the local SQLite database and hand it to Tauri's managed state
