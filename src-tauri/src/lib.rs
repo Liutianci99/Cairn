@@ -1,9 +1,61 @@
+mod db;
+
+use std::sync::Mutex;
+
+use rusqlite::Connection;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
+
+/// Open the SQLite database, preferring `D:\Cairn\cairn.db` — the user keeps data
+/// off the space-constrained C: drive. Falls back to the app data dir if that
+/// location can't be created, so the app still runs on a machine without a D: drive.
+fn open_db(app: &tauri::App) -> Connection {
+    let preferred = std::path::PathBuf::from(r"D:\Cairn");
+    let dir = if std::fs::create_dir_all(&preferred).is_ok() {
+        preferred
+    } else {
+        let fallback = app
+            .path()
+            .app_data_dir()
+            .expect("no writable data directory available");
+        let _ = std::fs::create_dir_all(&fallback);
+        fallback
+    };
+    let conn = Connection::open(dir.join("cairn.db")).expect("failed to open database");
+    db::init_schema(&conn).expect("failed to initialize database schema");
+    conn
+}
+
+#[tauri::command]
+fn list_projects(state: tauri::State<'_, Mutex<Connection>>) -> Result<Vec<db::Project>, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::list_projects(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn create_project(
+    state: tauri::State<'_, Mutex<Connection>>,
+    title: String,
+    priority: String,
+    milestones: Vec<String>,
+) -> Result<db::Project, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::create_project(&conn, &title, &priority, &milestones).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_milestone_done(
+    state: tauri::State<'_, Mutex<Connection>>,
+    milestone_id: String,
+    done: bool,
+) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::set_milestone_done(&conn, &milestone_id, done).map_err(|e| e.to_string())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -13,7 +65,16 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .invoke_handler(tauri::generate_handler![
+            list_projects,
+            create_project,
+            set_milestone_done
+        ])
         .setup(|app| {
+            // Open the local SQLite database and hand it to Tauri's managed state
+            // so commands can borrow a shared connection.
+            app.manage(Mutex::new(open_db(app)));
+
             // Launch on login. Only the release build self-registers, so running
             // `tauri dev` never pollutes the startup list with the debug exe.
             #[cfg(not(debug_assertions))]

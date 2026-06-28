@@ -1,65 +1,36 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 
 type Priority = "high" | "normal";
 
 interface Milestone {
+  id: string;
   title: string;
   done: boolean;
+  position?: number;
 }
 
 interface Project {
   id: string;
   title: string;
   priority: Priority;
+  position?: number;
   milestones: Milestone[];
 }
 
-// --- sample data (standalone, in-memory for now) ---
-function ms(titles: string[], doneCount: number): Milestone[] {
-  return titles.map((title, i) => ({ title, done: i < doneCount }));
+// Projects live in the local SQLite database (via Tauri commands). This array is
+// just an in-memory cache: mutations update it optimistically and persist in the
+// background, falling back to a reload if a write fails.
+let projects: Project[] = [];
+
+async function reload() {
+  projects = await invoke<Project[]>("list_projects");
+  render();
 }
 
-let projects: Project[] = [
-  {
-    id: "p1",
-    title: "Momento 多端同步",
-    priority: "high",
-    milestones: ms(["立项", "数据层", "同步协议", "客户端", "联调"], 3),
-  },
-  {
-    id: "p2",
-    title: "毕业设计论文",
-    priority: "high",
-    milestones: ms(["选题", "需求分析", "系统设计", "实现"], 1),
-  },
-  {
-    id: "p3",
-    title: "个人网站后端",
-    priority: "normal",
-    milestones: ms(["接口设计", "md 同步", "问答 agent"], 1),
-  },
-  {
-    id: "p4",
-    title: "实习中台需求",
-    priority: "high",
-    milestones: ms(["评审", "联调", "测试", "上线", "复盘"], 4),
-  },
-  {
-    id: "p5",
-    title: "Verba 迁移腾讯云",
-    priority: "normal",
-    milestones: ms(["盘点", "打包", "迁移", "验证"], 1),
-  },
-  {
-    id: "p6",
-    title: "Momento V3 改版",
-    priority: "normal",
-    milestones: ms(["设计", "落代码", "自测", "发布"], 4),
-  },
-];
-
 const doneCount = (p: Project) => p.milestones.filter((m) => m.done).length;
-const isComplete = (p: Project) => p.milestones.every((m) => m.done);
+const isComplete = (p: Project) =>
+  p.milestones.length > 0 && p.milestones.every((m) => m.done);
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -83,9 +54,16 @@ function buildStepper(p: Project, complete: boolean): HTMLElement {
     if (p.milestones[i].done) node.classList.add("done");
     else if (i === done && !complete) node.classList.add("current");
     if (complete) node.classList.add("mint");
-    node.addEventListener("click", () => {
-      p.milestones[i].done = !p.milestones[i].done;
+    node.addEventListener("click", async () => {
+      const m = p.milestones[i];
+      m.done = !m.done; // optimistic
       render();
+      try {
+        await invoke("set_milestone_done", { milestoneId: m.id, done: m.done });
+      } catch (e) {
+        console.error("set_milestone_done failed", e);
+        await reload(); // fall back to the persisted truth
+      }
     });
     stepper.appendChild(node);
     if (i < total - 1) {
@@ -154,14 +132,18 @@ function render() {
   const add = el("button", "add-btn", "+");
   add.type = "button";
   add.title = "新建项目";
-  add.addEventListener("click", () => {
-    projects.push({
-      id: "p" + (projects.length + 1),
-      title: "新项目",
-      priority: "normal",
-      milestones: ms(["节点 1", "节点 2", "节点 3"], 0),
-    });
-    render();
+  add.addEventListener("click", async () => {
+    try {
+      const created = await invoke<Project>("create_project", {
+        title: "新项目",
+        priority: "normal",
+        milestones: ["节点 1", "节点 2", "节点 3"],
+      });
+      projects.push(created);
+      render();
+    } catch (e) {
+      console.error("create_project failed", e);
+    }
   });
 
   header.appendChild(titles);
@@ -187,4 +169,6 @@ function render() {
   app.appendChild(grip);
 }
 
-window.addEventListener("DOMContentLoaded", render);
+window.addEventListener("DOMContentLoaded", () => {
+  void reload();
+});
