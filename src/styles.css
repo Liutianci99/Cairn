@@ -1,12 +1,26 @@
 :root {
-  --accent1: #8aa0ff;
-  --accent2: #b98bff;
-  --mint: #8cdcb5;
-  --hi: #ff8f70;
-  --normal: #8ca1ff;
+  /* V2 tokens — pulled 1:1 from Figma (Cairo / Cairn V2, node 30:2) */
+  --accent: #99a8ff; /* stepper done line + node (flat, not gradient) */
+  --accent1: #8aa0ff; /* primary-button gradient start */
+  --accent2: #b98bff; /* primary-button gradient end */
+  --mint: #8cdbb5; /* completed project */
+  --hi: #ff8f70; /* high-priority dot */
+  --normal: #8ca1ff; /* normal-priority dot */
+  --glow: 138, 160, 255; /* #8aa0ff as rgb parts — the hover bloom */
+
   --text: rgba(255, 255, 255, 0.92);
+  --text-strong: rgba(255, 255, 255, 0.96);
+  --text-mid: rgba(255, 255, 255, 0.5);
   --text-dim: rgba(255, 255, 255, 0.45);
   --track: rgba(255, 255, 255, 0.13);
+
+  /* ambient colour wash painted under the frosted glass — see .backdrop.
+     Tunable: these four blobs echo the blue/violet/teal/magenta of the
+     Figma showcase (3:3–3:6) without sampling the live desktop. */
+  --glow-blue: rgba(96, 124, 255, 0.34);
+  --glow-violet: rgba(150, 96, 232, 0.3);
+  --glow-teal: rgba(38, 150, 156, 0.24);
+  --glow-magenta: rgba(196, 74, 150, 0.22);
 }
 
 * {
@@ -19,7 +33,7 @@ body {
   height: 100%;
   background: transparent;
   overflow: hidden;
-  font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC",
+  font-family: "Noto Sans SC", "Microsoft YaHei UI", "PingFang SC", "Segoe UI",
     system-ui, sans-serif;
   color: var(--text);
   -webkit-user-select: none;
@@ -27,35 +41,46 @@ body {
   cursor: default;
 }
 
-.panel {
+/* =====================================================================
+   Frosted-glass card  (shared by the widget panel and the editor window)
+   The window is transparent + borderless; the rounded glass shape, the
+   colour wash and the depth all come from CSS. We do NOT use backdrop-filter:
+   WebView2 over a transparent window can't reliably sample Wallpaper Engine's
+   live wallpaper (it goes flat grey), so the glow is self-painted instead.
+   ===================================================================== */
+.panel,
+.editor-root {
   position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+}
+
+.panel {
   height: 100vh;
   width: 100vw;
-  padding: 8px 18px 16px;
+  border-radius: 28px;
+  padding: 8px 20px 20px;
   display: flex;
   flex-direction: column;
-  /* Frosted glass is faked from a blurred copy of the wallpaper image (.backdrop):
-     Windows acrylic can't sample Wallpaper Engine's live wallpaper (it only sees
-     the static desktop and goes flat gray), so we blur a known wallpaper image
-     ourselves. The panel itself is transparent; .backdrop holds the blurred
-     image + dark veil. Single rounded rect comes from the window, no CSS border. */
-  background: transparent;
-  overflow: hidden;
 }
 
 /* fine frosted grain over the glass */
-.panel::before {
+.panel::before,
+.editor-root::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: 0.05;
+  z-index: 0;
   mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* top edge highlight */
-.panel::after {
+/* glossy top-edge highlight (光泽顶边) */
+.panel::after,
+.editor-root::after {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
@@ -63,54 +88,58 @@ body {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.25),
+    rgba(255, 255, 255, 0.28),
     transparent
   );
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
 }
 
-/* blurred-wallpaper backdrop — the fake-frosted-glass layer */
+/* painted colour-glow backdrop — the self-contained "光影" layer.
+   Opaque dark base so the raw desktop never bleeds through; four soft
+   radial blooms give the blue/violet/teal/magenta wash; a dark veil on
+   top keeps text readable. */
 .backdrop {
   position: absolute;
   inset: 0;
   z-index: -1;
   overflow: hidden;
-}
-.backdrop::before {
-  content: "";
-  position: absolute;
-  inset: -40px; /* bleed so the blur doesn't fade at the edges */
-  background-image: url("./assets/wallpaper.jpg");
-  background-size: cover;
-  background-position: right top;
-  filter: blur(26px) saturate(1.08) brightness(0.82);
+  border-radius: inherit;
+  background:
+    radial-gradient(520px 400px at 16% 2%, var(--glow-blue), transparent 58%),
+    radial-gradient(560px 460px at 86% 16%, var(--glow-violet), transparent 60%),
+    radial-gradient(460px 440px at 24% 104%, var(--glow-teal), transparent 60%),
+    radial-gradient(420px 400px at 106% 86%, var(--glow-magenta), transparent 58%),
+    linear-gradient(158deg, #161a2e 0%, #0c0e1a 70%, #0a0c16 100%);
 }
 .backdrop::after {
   content: "";
   position: absolute;
   inset: 0;
-  /* dark veil for depth + text readability */
   background: linear-gradient(
-    160deg,
-    rgba(14, 16, 26, 0.4),
-    rgba(10, 12, 20, 0.58)
+    165deg,
+    rgba(10, 12, 22, 0.28),
+    rgba(8, 10, 18, 0.52)
   );
 }
 
-/* keep content above the backdrop */
+/* keep content above the backdrop / grain */
 .draghandle-strip,
 .header,
-.list {
+.list,
+.editor-root > *:not(.backdrop) {
   position: relative;
   z-index: 1;
 }
 
+/* =====================================================================
+   Widget — header, list, rows, steppers
+   ===================================================================== */
 .draghandle-strip {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 4px 0 10px;
+  padding: 4px 0 8px;
   cursor: grab;
   flex-shrink: 0;
 }
@@ -118,17 +147,17 @@ body {
   cursor: grabbing;
 }
 .draghandle {
-  width: 44px;
-  height: 5px;
+  width: 40px;
+  height: 4px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   flex-shrink: 0;
 }
 
@@ -138,34 +167,36 @@ body {
 }
 
 .title {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
+  color: var(--text-strong);
 }
 
 .subtitle {
   margin-top: 3px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.42);
 }
 
 .add-btn {
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.85);
-  font-size: 20px;
+  font-size: 24px;
+  font-weight: 300;
   line-height: 1;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
 }
 .add-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.14);
 }
 .add-btn:active {
   transform: scale(0.94);
@@ -175,7 +206,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 16px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 3px;
@@ -192,22 +223,29 @@ body {
 .row {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  margin: 0 -10px;
-  padding: 10px 12px;
-  border-radius: 14px;
+  gap: 11px;
+  margin: 0 -12px;
+  padding: 9px 12px;
+  border-radius: 16px;
   border: 1px solid transparent;
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.2s ease, background 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease, background 0.2s ease, border-color 0.2s ease;
 }
+/* 浮光 hover — 1:1 with Figma node 32:19:
+   lift + glassy fill + blue bloom + dark drop + inset glossy top edge */
 .row:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
   transform: translateY(-3px);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 26px rgba(var(--glow), 0.3),
+    0 16px 30px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.32);
 }
 .row.completed {
   opacity: 0.45;
+}
+.row.completed:hover {
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.28);
 }
 .row.completed .row-title {
   text-decoration: line-through;
@@ -243,15 +281,15 @@ body {
   flex-shrink: 0;
 }
 .row-title {
-  font-size: 14.5px;
-  color: var(--text);
+  font-size: 15px;
+  color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .count {
-  font-size: 12.5px;
-  color: var(--text-dim);
+  font-size: 13px;
+  color: var(--text-mid);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
@@ -267,7 +305,7 @@ body {
   border-radius: 50%;
   flex-shrink: 0;
   padding: 0;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border: 1.5px solid rgba(255, 255, 255, 0.26);
   background: transparent;
   cursor: pointer;
   transition: transform 0.1s ease, border-color 0.15s ease;
@@ -277,11 +315,11 @@ body {
 }
 .node.done {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--accent1), var(--accent2));
+  background: var(--accent);
 }
 .node.current {
-  border-color: var(--accent1);
-  background: rgba(138, 160, 255, 0.18);
+  border-color: var(--accent);
+  background: rgba(153, 168, 255, 0.18);
 }
 .node.done.mint {
   background: var(--mint);
@@ -293,7 +331,7 @@ body {
   background: var(--track);
 }
 .conn.done {
-  background: linear-gradient(90deg, var(--accent1), var(--accent2));
+  background: var(--accent);
 }
 .conn.done.mint {
   background: var(--mint);
@@ -305,66 +343,60 @@ body {
   bottom: 6px;
   width: 16px;
   height: 16px;
-  z-index: 2;
+  z-index: 3;
   cursor: nwse-resize;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cg fill='rgba(255,255,255,0.4)'%3E%3Ccircle cx='12.5' cy='12.5' r='1.3'/%3E%3Ccircle cx='12.5' cy='7.5' r='1.3'/%3E%3Ccircle cx='7.5' cy='12.5' r='1.3'/%3E%3Ccircle cx='12.5' cy='2.5' r='1.3'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.3'/%3E%3Ccircle cx='2.5' cy='12.5' r='1.3'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: no-repeat;
 }
 
-/* ---------- create / edit dialog ---------- */
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(6, 7, 12, 0.55);
-  backdrop-filter: blur(2px);
+/* =====================================================================
+   Editor window — standalone create/edit panel (Figma node 31:2)
+   Pinned to the left of the widget; 380 wide, height auto-fitted.
+   ===================================================================== */
+.editor-app {
+  width: 100vw;
+  min-height: 100vh;
 }
-.dialog {
-  width: 300px;
-  max-height: 88vh;
-  overflow-y: auto;
+.editor-root {
+  width: 100%;
+  border-radius: 24px;
+  padding: 26px;
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  padding: 20px;
-  border-radius: 22px;
-  background: rgba(18, 20, 28, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  gap: 18px;
 }
+
 .dialog-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--text-strong);
 }
 .field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 .field-label {
   font-size: 12px;
   color: var(--text-dim);
 }
 .text-input {
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 13px;
   font-family: inherit;
   outline: none;
+  transition: border-color 0.14s ease, background 0.14s ease;
 }
 .text-input::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.4);
 }
 .text-input:focus {
-  border-color: rgba(138, 160, 255, 0.55);
+  border-color: rgba(153, 168, 255, 0.55);
   background: rgba(255, 255, 255, 0.09);
 }
 .node-inputs {
@@ -388,6 +420,7 @@ body {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-dim);
   font-size: 13px;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
@@ -405,10 +438,10 @@ body {
 }
 .seg-pill.active {
   background: rgba(255, 255, 255, 0.14);
-  color: var(--text);
+  color: rgba(255, 255, 255, 0.92);
 }
 .seg-pill.normal.active {
-  border-color: rgba(140, 161, 255, 0.55);
+  border-color: rgba(153, 168, 255, 0.55);
 }
 .seg-pill.high.active {
   border-color: rgba(255, 143, 112, 0.55);
@@ -416,7 +449,7 @@ body {
 .stepper-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .step-btn {
   width: 34px;
@@ -431,21 +464,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.14s ease;
 }
 .step-btn:hover {
   background: rgba(255, 255, 255, 0.14);
 }
 .step-num {
-  min-width: 28px;
+  min-width: 30px;
   text-align: center;
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
+  color: var(--text-strong);
 }
 .dialog-actions {
   display: flex;
   gap: 10px;
-  padding-top: 2px;
+  padding-top: 4px;
 }
 .btn-ghost,
 .btn-primary {
@@ -453,6 +488,7 @@ body {
   height: 42px;
   border-radius: 10px;
   font-size: 14px;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   border: none;
@@ -466,15 +502,16 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent1), var(--accent2));
-  color: #fff;
-  font-weight: 500;
+  background: linear-gradient(90deg, var(--accent1), var(--accent2));
+  color: rgba(255, 255, 255, 0.98);
 }
 .btn-primary:hover {
   filter: brightness(1.06);
 }
 
-/* ---------- right-click context menu ---------- */
+/* =====================================================================
+   Right-click context menu
+   ===================================================================== */
 .ctx-menu {
   position: fixed;
   z-index: 60;
