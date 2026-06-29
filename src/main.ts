@@ -1,5 +1,11 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  getCurrentWindow,
+  LogicalSize,
+  PhysicalPosition,
+} from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
 
 type Priority = "high" | "normal";
 
@@ -18,20 +24,6 @@ interface Project {
   milestones: Milestone[];
 }
 
-// Projects live in the local SQLite database (via Tauri commands). This array is
-// just an in-memory cache: mutations update it optimistically and persist in the
-// background, falling back to a reload if a write fails.
-let projects: Project[] = [];
-
-async function reload() {
-  projects = await invoke<Project[]>("list_projects");
-  render();
-}
-
-const doneCount = (p: Project) => p.milestones.filter((m) => m.done).length;
-const isComplete = (p: Project) =>
-  p.milestones.length > 0 && p.milestones.every((m) => m.done);
-
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   cls?: string,
@@ -47,6 +39,20 @@ const ICON_EDIT =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>';
 const ICON_DELETE =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+
+const doneCount = (p: Project) => p.milestones.filter((m) => m.done).length;
+const isComplete = (p: Project) =>
+  p.milestones.length > 0 && p.milestones.every((m) => m.done);
+
+// ====================================================================
+// Widget mode — the main desktop panel
+// ====================================================================
+let projects: Project[] = [];
+
+async function reload() {
+  projects = await invoke<Project[]>("list_projects");
+  render();
+}
 
 function buildStepper(p: Project, complete: boolean): HTMLElement {
   const done = doneCount(p);
@@ -67,7 +73,7 @@ function buildStepper(p: Project, complete: boolean): HTMLElement {
         await invoke("set_milestone_done", { milestoneId: m.id, done: m.done });
       } catch (e) {
         console.error("set_milestone_done failed", e);
-        await reload(); // fall back to the persisted truth
+        await reload();
       }
     });
     stepper.appendChild(node);
@@ -100,7 +106,6 @@ function buildRow(p: Project): HTMLElement {
   row.appendChild(top);
   row.appendChild(buildStepper(p, complete));
 
-  // right-click → edit / delete menu
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e.clientX, e.clientY, p);
@@ -114,7 +119,6 @@ function render() {
   if (!app) return;
   app.innerHTML = "";
 
-  // blurred-wallpaper backdrop (fakes frosted glass; see .backdrop in styles.css)
   app.appendChild(el("div", "backdrop"));
 
   const ordered = [...projects].sort(
@@ -123,39 +127,31 @@ function render() {
   const activeCount = projects.filter((p) => !isComplete(p)).length;
   const doneProjects = projects.length - activeCount;
 
-  // top-center drag handle
   const dragStrip = el("div", "draghandle-strip");
   dragStrip.setAttribute("data-tauri-drag-region", "");
   dragStrip.appendChild(el("div", "draghandle"));
   app.appendChild(dragStrip);
 
-  // header
   const header = el("div", "header");
   const titles = el("div", "titles");
-  const t = el("div", "title", "项目");
-  const sub = el(
-    "div",
-    "subtitle",
-    `进行中 ${activeCount} · 已完成 ${doneProjects}`,
+  titles.appendChild(el("div", "title", "项目"));
+  titles.appendChild(
+    el("div", "subtitle", `进行中 ${activeCount} · 已完成 ${doneProjects}`),
   );
-  titles.appendChild(t);
-  titles.appendChild(sub);
 
   const add = el("button", "add-btn", "+");
   add.type = "button";
   add.title = "新建项目";
-  add.addEventListener("click", () => openProjectDialog());
+  add.addEventListener("click", () => void openEditor());
 
   header.appendChild(titles);
   header.appendChild(add);
   app.appendChild(header);
 
-  // list
   const list = el("div", "list");
   for (const p of ordered) list.appendChild(buildRow(p));
   app.appendChild(list);
 
-  // resize grip (bottom-right)
   const grip = el("div", "grip");
   grip.title = "拖拽调整大小";
   grip.addEventListener("mousedown", async (e) => {
@@ -169,7 +165,6 @@ function render() {
   app.appendChild(grip);
 }
 
-// ---------- right-click context menu ----------
 function showContextMenu(x: number, y: number, p: Project) {
   document.querySelectorAll(".ctx-menu").forEach((m) => m.remove());
 
@@ -188,7 +183,6 @@ function showContextMenu(x: number, y: number, p: Project) {
   menu.appendChild(del);
   document.body.appendChild(menu);
 
-  // clamp into the viewport
   const r = menu.getBoundingClientRect();
   menu.style.left = Math.min(x, window.innerWidth - r.width - 8) + "px";
   menu.style.top = Math.min(y, window.innerHeight - r.height - 8) + "px";
@@ -211,7 +205,7 @@ function showContextMenu(x: number, y: number, p: Project) {
 
   edit.addEventListener("click", () => {
     close();
-    openProjectDialog(p);
+    void openEditor(p);
   });
   del.addEventListener("click", async () => {
     close();
@@ -225,11 +219,109 @@ function showContextMenu(x: number, y: number, p: Project) {
   });
 }
 
-// ---------- create / edit dialog ----------
-function openProjectDialog(existing?: Project) {
+// Open the create/edit form as a separate window pinned just left of the widget.
+async function openEditor(existing?: Project) {
+  try {
+    const old = await WebviewWindow.getByLabel("editor");
+    if (old) await old.close();
+  } catch {
+    /* ignore */
+  }
+
+  const main = getCurrentWindow();
+  let x = 100;
+  let y = 100;
+  try {
+    const [pos, scale] = await Promise.all([
+      main.outerPosition(),
+      main.scaleFactor(),
+    ]);
+    const wPhys = Math.round(380 * scale);
+    const gapPhys = Math.round(16 * scale);
+    x = pos.x - wPhys - gapPhys;
+    y = pos.y;
+  } catch (e) {
+    console.error("could not read widget position", e);
+  }
+
+  const url =
+    "index.html?mode=editor&x=" +
+    x +
+    "&y=" +
+    y +
+    (existing ? "&id=" + encodeURIComponent(existing.id) : "");
+
+  const win = new WebviewWindow("editor", {
+    url,
+    width: 380,
+    height: 320,
+    decorations: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focus: false,
+    shadow: true,
+    visible: false,
+    title: "Cairn 编辑",
+  });
+  win.once("tauri://error", (e) => console.error("editor window error", e));
+}
+
+// ====================================================================
+// Editor mode — the standalone create/edit window
+// ====================================================================
+async function setupEditor(paramsIn: URLSearchParams) {
+  const id = paramsIn.get("id");
+  const px = Number(paramsIn.get("x"));
+  const py = Number(paramsIn.get("y"));
+
+  let existing: Project | undefined;
+  if (id) {
+    try {
+      const all = await invoke<Project[]>("list_projects");
+      existing = all.find((p) => p.id === id);
+    } catch (e) {
+      console.error("load project failed", e);
+    }
+  }
+
+  renderEditor(existing);
+
+  const win = getCurrentWindow();
+  await fitWindow();
+  try {
+    if (!Number.isNaN(px) && !Number.isNaN(py)) {
+      await win.setPosition(new PhysicalPosition(px, py));
+    }
+    await win.show();
+    await win.setFocus();
+  } catch (e) {
+    console.error("position/show editor failed", e);
+  }
+}
+
+async function fitWindow() {
+  await new Promise((r) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => r(null))),
+  );
+  const root = document.querySelector<HTMLElement>(".editor-root");
+  const h = root ? root.offsetHeight : 360;
+  try {
+    await getCurrentWindow().setSize(new LogicalSize(380, h));
+  } catch (e) {
+    console.error("setSize failed", e);
+  }
+}
+
+function renderEditor(existing?: Project) {
+  const app = document.querySelector<HTMLDivElement>("#app");
+  if (!app) return;
+  app.className = "editor-app";
+  app.innerHTML = "";
+
   const isEdit = !!existing;
   let priority: Priority = existing?.priority ?? "normal";
-  // working node list; existing milestones keep their id so done is preserved
   const nodes: { id: string | null; title: string }[] = existing
     ? existing.milestones.map((m) => ({ id: m.id, title: m.title }))
     : [
@@ -238,11 +330,11 @@ function openProjectDialog(existing?: Project) {
         { id: null, title: "节点 3" },
       ];
 
-  const overlay = el("div", "dialog-overlay");
-  const dialog = el("div", "dialog");
-  overlay.appendChild(dialog);
+  const root = el("div", "editor-root");
+  root.appendChild(el("div", "backdrop"));
+  app.appendChild(root);
 
-  dialog.appendChild(el("div", "dialog-title", isEdit ? "编辑项目" : "新建项目"));
+  root.appendChild(el("div", "dialog-title", isEdit ? "编辑项目" : "新建项目"));
 
   // name
   const nameWrap = el("div", "field");
@@ -253,7 +345,7 @@ function openProjectDialog(existing?: Project) {
   nameInput.placeholder = "项目名称";
   nameInput.value = existing?.title ?? "";
   nameWrap.appendChild(nameInput);
-  dialog.appendChild(nameWrap);
+  root.appendChild(nameWrap);
 
   // priority
   const prioWrap = el("div", "field");
@@ -279,7 +371,7 @@ function openProjectDialog(existing?: Project) {
   seg.appendChild(makePill("normal", "普通"));
   seg.appendChild(makePill("high", "重要"));
   prioWrap.appendChild(seg);
-  dialog.appendChild(prioWrap);
+  root.appendChild(prioWrap);
 
   // node count
   const countWrap = el("div", "field");
@@ -294,14 +386,14 @@ function openProjectDialog(existing?: Project) {
   stepperRow.appendChild(countNum);
   stepperRow.appendChild(plus);
   countWrap.appendChild(stepperRow);
-  dialog.appendChild(countWrap);
+  root.appendChild(countWrap);
 
   // node names
   const namesWrap = el("div", "field");
   namesWrap.appendChild(el("label", "field-label", "节点命名"));
   const nodesContainer = el("div", "node-inputs");
   namesWrap.appendChild(nodesContainer);
-  dialog.appendChild(namesWrap);
+  root.appendChild(namesWrap);
 
   function renderNodes() {
     countNum.textContent = String(nodes.length);
@@ -317,6 +409,7 @@ function openProjectDialog(existing?: Project) {
       });
       nodesContainer.appendChild(inp);
     });
+    void fitWindow();
   }
   renderNodes();
 
@@ -335,28 +428,19 @@ function openProjectDialog(existing?: Project) {
   const actions = el("div", "dialog-actions");
   const cancel = el("button", "btn-ghost", "取消");
   cancel.type = "button";
-  const save = el("button", "btn-primary", "保存");
-  save.type = "button";
+  const confirm = el("button", "btn-primary", "确认");
+  confirm.type = "button";
   actions.appendChild(cancel);
-  actions.appendChild(save);
-  dialog.appendChild(actions);
+  actions.appendChild(confirm);
+  root.appendChild(actions);
 
-  const close = () => {
-    overlay.remove();
-    document.removeEventListener("keydown", onKey);
-    // drop the window back to the desktop bottom layer
-    void invoke("set_editing", { editing: false }).catch(() => {});
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") close();
-  };
-  document.addEventListener("keydown", onKey);
-  overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) close();
+  const closeWin = () => void getCurrentWindow().close();
+  cancel.addEventListener("click", closeWin);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeWin();
   });
-  cancel.addEventListener("click", close);
 
-  save.addEventListener("click", async () => {
+  confirm.addEventListener("click", async () => {
     const title = nameInput.value.trim() || (isEdit ? existing!.title : "新项目");
     const named = nodes.map((n, i) => ({
       id: n.id,
@@ -364,39 +448,40 @@ function openProjectDialog(existing?: Project) {
     }));
     try {
       if (isEdit) {
-        const updated = await invoke<Project>("update_project", {
+        await invoke("update_project", {
           id: existing!.id,
           title,
           priority,
           milestones: named,
         });
-        const idx = projects.findIndex((p) => p.id === updated.id);
-        if (idx >= 0) projects[idx] = updated;
-        else projects.push(updated);
       } else {
-        const created = await invoke<Project>("create_project", {
+        await invoke("create_project", {
           title,
           priority,
           milestones: named.map((n) => n.title),
         });
-        projects.push(created);
       }
-      close();
-      render();
+      await emit("projects-changed");
+      closeWin();
     } catch (e) {
       console.error("save project failed", e);
     }
   });
 
-  // lift the window forward + make it focusable so the text fields accept input
-  void invoke("set_editing", { editing: true }).catch(() => {});
-  document.body.appendChild(overlay);
   nameInput.focus();
 }
 
-// suppress the default browser context menu app-wide; rows show a custom one
+// ====================================================================
+// Boot
+// ====================================================================
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 window.addEventListener("DOMContentLoaded", () => {
-  void reload();
+  const params = new URLSearchParams(location.search);
+  if (params.get("mode") === "editor") {
+    void setupEditor(params);
+  } else {
+    void reload();
+    void listen("projects-changed", () => void reload());
+  }
 });
