@@ -75,6 +75,15 @@ fn delete_project(state: tauri::State<'_, Mutex<Connection>>, id: String) -> Res
     db::delete_project(&conn, &id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn reorder_projects(
+    state: tauri::State<'_, Mutex<Connection>>,
+    ordered_ids: Vec<String>,
+) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::reorder_projects(&conn, &ordered_ids).map_err(|e| e.to_string())
+}
+
 /// Pin the window to the desktop bottom layer (never above other windows). When
 /// `pinned`, the window is non-activating and sits at the bottom of the z-order;
 /// when not, it can come forward and take keyboard focus (needed to type in the
@@ -135,7 +144,8 @@ pub fn run() {
             set_milestone_done,
             update_project,
             delete_project,
-            set_editing
+            set_editing,
+            reorder_projects
         ])
         .setup(|app| {
             // Open the local SQLite database and hand it to Tauri's managed state
@@ -169,12 +179,11 @@ pub fn run() {
 
             let window = app.get_webview_window("main").unwrap();
 
-            // Dark acrylic frosted glass — frosts the real desktop behind the window.
-            #[cfg(target_os = "windows")]
-            {
-                use window_vibrancy::apply_acrylic;
-                let _ = apply_acrylic(&window, Some((10, 12, 20, 120)));
-            }
+            // NB: no acrylic/mica here. The glass look is painted entirely in CSS
+            // (see .backdrop), so a window material would only show as a grey ring
+            // in the corner gap between the window's ~8px system rounding and the
+            // 28px CSS radius. The transparent window lets the CSS shape stand on
+            // its own.
 
             // Pin to the top-right corner of the primary monitor with a margin.
             if let Ok(Some(monitor)) = window.current_monitor() {

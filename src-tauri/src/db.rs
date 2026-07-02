@@ -206,6 +206,22 @@ pub fn delete_project(conn: &Connection, id: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// Persist a new top-to-bottom ordering of projects. `ordered_ids` is the full
+/// list of project ids in the desired order; each project's `position` is set to
+/// its index, so a later `list_projects` returns them in this order. Ids not in
+/// the list are left untouched (kept for robustness; the UI always sends all).
+pub fn reorder_projects(conn: &Connection, ordered_ids: &[String]) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    for (i, id) in ordered_ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE projects SET position = ?1 WHERE id = ?2",
+            params![i as i64, id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,5 +334,25 @@ mod tests {
             )
             .unwrap();
         assert_eq!(orphan, 0);
+    }
+
+    #[test]
+    fn reorder_projects_persists_new_order() {
+        let c = mem();
+        let a = create_project(&c, "A", "normal", &[]).unwrap();
+        let b = create_project(&c, "B", "normal", &[]).unwrap();
+        let d = create_project(&c, "C", "normal", &[]).unwrap();
+
+        // default insertion order is A, B, C
+        let before: Vec<String> =
+            list_projects(&c).unwrap().into_iter().map(|p| p.title).collect();
+        assert_eq!(before, ["A", "B", "C"]);
+
+        // move C to the front: C, A, B
+        reorder_projects(&c, &[d.id.clone(), a.id.clone(), b.id.clone()]).unwrap();
+
+        let after: Vec<String> =
+            list_projects(&c).unwrap().into_iter().map(|p| p.title).collect();
+        assert_eq!(after, ["C", "A", "B"]);
     }
 }

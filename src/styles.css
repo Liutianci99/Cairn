@@ -52,7 +52,6 @@ body {
 .editor-root {
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
   background: transparent;
 }
 
@@ -209,8 +208,12 @@ body {
   gap: 16px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 3px;
-  margin-right: -3px;
+  /* A scroll container clips its content to a rectangle. Pad it — and pull the
+     box back out with a matching negative margin so the rows still line up with
+     the header — so each row's rounded corners and hover bloom sit inside the
+     clip instead of being sliced flat into a hard-edged rectangle. */
+  padding: 6px 16px;
+  margin: 0 -16px;
 }
 .list::-webkit-scrollbar {
   width: 5px;
@@ -224,21 +227,23 @@ body {
   display: flex;
   flex-direction: column;
   gap: 11px;
-  margin: 0 -12px;
-  padding: 9px 12px;
+  margin: 0;
+  padding: 13px 16px;
   border-radius: 16px;
   border: 1px solid transparent;
+  cursor: grab;
   transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.22s ease, background 0.2s ease, border-color 0.2s ease;
 }
 /* 浮光 hover — 1:1 with Figma node 32:19:
-   lift + glassy fill + blue bloom + dark drop + inset glossy top edge */
+   lift + glassy fill + clearly rounded bright border (content kept well inset
+   from the edge via the 13/16 padding) + blue bloom + dark drop + glossy top */
 .row:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.18);
-  transform: translateY(-3px);
-  box-shadow: 0 6px 26px rgba(var(--glow), 0.3),
-    0 16px 30px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-4px);
+  box-shadow: 0 6px 26px rgba(var(--glow), 0.32),
+    0 18px 34px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.34);
 }
 .row.completed {
   opacity: 0.45;
@@ -249,6 +254,25 @@ body {
 }
 .row.completed .row-title {
   text-decoration: line-through;
+}
+/* card being dragged to reorder — lifted out of flow (position:fixed set inline)
+   so it follows the cursor; transitions off so it tracks without lag */
+.row.dragging {
+  cursor: grabbing;
+  opacity: 0.95;
+  transition: none;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: 0 12px 32px rgba(var(--glow), 0.42), 0 24px 44px rgba(0, 0, 0, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.36);
+  z-index: 999;
+}
+/* the gap the dragged card leaves behind, showing where it will drop */
+.row-placeholder {
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
 }
 
 .row-top {
