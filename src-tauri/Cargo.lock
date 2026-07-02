@@ -378,7 +378,6 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-opener",
  "uuid",
- "window-vibrancy",
  "windows-sys 0.59.0",
 ]
 

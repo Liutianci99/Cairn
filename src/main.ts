@@ -91,6 +91,7 @@ function buildStepper(p: Project, complete: boolean): HTMLElement {
 function buildRow(p: Project): HTMLElement {
   const complete = isComplete(p);
   const row = el("div", "row" + (complete ? " completed" : ""));
+  row.dataset.id = p.id;
 
   const top = el("div", "row-top");
   const left = el("div", "row-left");
@@ -112,6 +113,108 @@ function buildRow(p: Project): HTMLElement {
   });
 
   return row;
+}
+
+// Left-press-and-drag a project card to reorder the list. The card lifts out of
+// flow and follows the cursor while a dashed placeholder marks where it will
+// drop; the new order is persisted (reorder_projects) so it survives reloads. A
+// small movement threshold keeps plain clicks — milestone toggles, the
+// right-click menu — from being read as a drag.
+function wireDrag(list: HTMLElement) {
+  let candidate: HTMLElement | null = null;
+  let dragging: HTMLElement | null = null;
+  let placeholder: HTMLElement | null = null;
+  let startY = 0;
+  let grabOffsetY = 0;
+  let started = false;
+
+  const positionCard = (clientY: number) => {
+    if (!dragging || !placeholder) return;
+    dragging.style.top = clientY - grabOffsetY + "px"; // follow the cursor
+    // slot the placeholder before the first row whose middle is below the
+    // cursor; if none, it lands at the end
+    let target: HTMLElement | null = null;
+    for (const other of list.querySelectorAll<HTMLElement>(".row")) {
+      if (other === dragging) continue;
+      const r = other.getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) {
+        target = other;
+        break;
+      }
+    }
+    list.insertBefore(placeholder, target);
+  };
+
+  const beginDrag = (row: HTMLElement, e: MouseEvent) => {
+    started = true;
+    dragging = row;
+    const rect = row.getBoundingClientRect();
+    grabOffsetY = e.clientY - rect.top;
+
+    placeholder = document.createElement("div");
+    placeholder.className = "row-placeholder";
+    placeholder.style.height = rect.height + "px";
+    list.insertBefore(placeholder, row);
+
+    // lift the card out of flow so it can float over everything and follow the
+    // cursor; the placeholder keeps the list from collapsing
+    row.classList.add("dragging");
+    row.style.position = "fixed";
+    row.style.width = rect.width + "px";
+    row.style.left = rect.left + "px";
+    row.style.pointerEvents = "none";
+    positionCard(e.clientY);
+  };
+
+  const onMove = (e: MouseEvent) => {
+    if (!candidate) return;
+    if (!started) {
+      if (Math.abs(e.clientY - startY) < 5) return; // ignore tiny jitter
+      beginDrag(candidate, e);
+    } else {
+      e.preventDefault();
+      positionCard(e.clientY);
+    }
+  };
+
+  const onUp = async () => {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    const didDrag = started;
+    if (dragging && placeholder) {
+      list.insertBefore(dragging, placeholder); // drop where the gap rests
+      placeholder.remove();
+      dragging.classList.remove("dragging");
+      dragging.removeAttribute("style"); // clear the inline float styles
+    }
+    candidate = null;
+    dragging = null;
+    placeholder = null;
+    started = false;
+    if (!didDrag) return; // a plain click, not a drag
+    const ids = [...list.querySelectorAll<HTMLElement>(".row")].map(
+      (r) => r.dataset.id!,
+    );
+    try {
+      await invoke("reorder_projects", { orderedIds: ids });
+    } catch (e) {
+      console.error("reorder_projects failed", e);
+    }
+    await reload();
+  };
+
+  list.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return; // left button only
+    const t = e.target as HTMLElement;
+    if (t.closest(".node")) return; // let milestone toggles work
+    const row = t.closest<HTMLElement>(".row");
+    if (!row) return;
+    candidate = row;
+    startY = e.clientY;
+    started = false;
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
 }
 
 function render() {
@@ -151,6 +254,7 @@ function render() {
   const list = el("div", "list");
   for (const p of ordered) list.appendChild(buildRow(p));
   app.appendChild(list);
+  wireDrag(list);
 
   const grip = el("div", "grip");
   grip.title = "拖拽调整大小";
@@ -258,10 +362,10 @@ async function openEditor(existing?: Project) {
     decorations: false,
     transparent: true,
     resizable: false,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     skipTaskbar: true,
     focus: false,
-    shadow: true,
+    shadow: false,
     visible: false,
     title: "Cairn 编辑",
   });
@@ -325,9 +429,9 @@ function renderEditor(existing?: Project) {
   const nodes: { id: string | null; title: string }[] = existing
     ? existing.milestones.map((m) => ({ id: m.id, title: m.title }))
     : [
-        { id: null, title: "节点 1" },
-        { id: null, title: "节点 2" },
-        { id: null, title: "节点 3" },
+        { id: null, title: "待办事项 1" },
+        { id: null, title: "待办事项 2" },
+        { id: null, title: "待办事项 3" },
       ];
 
   const root = el("div", "editor-root");
@@ -375,7 +479,7 @@ function renderEditor(existing?: Project) {
 
   // node count
   const countWrap = el("div", "field");
-  countWrap.appendChild(el("label", "field-label", "节点数量"));
+  countWrap.appendChild(el("label", "field-label", "待办事项数量"));
   const stepperRow = el("div", "stepper-row");
   const minus = el("button", "step-btn", "−");
   minus.type = "button";
@@ -390,7 +494,7 @@ function renderEditor(existing?: Project) {
 
   // node names
   const namesWrap = el("div", "field");
-  namesWrap.appendChild(el("label", "field-label", "节点命名"));
+  namesWrap.appendChild(el("label", "field-label", "待办事项命名"));
   const nodesContainer = el("div", "node-inputs");
   namesWrap.appendChild(nodesContainer);
   root.appendChild(namesWrap);
@@ -402,7 +506,7 @@ function renderEditor(existing?: Project) {
       const inp = document.createElement("input");
       inp.className = "text-input";
       inp.type = "text";
-      inp.placeholder = "节点 " + (i + 1);
+      inp.placeholder = "待办事项 " + (i + 1);
       inp.value = n.title;
       inp.addEventListener("input", () => {
         n.title = inp.value;
@@ -444,7 +548,7 @@ function renderEditor(existing?: Project) {
     const title = nameInput.value.trim() || (isEdit ? existing!.title : "新项目");
     const named = nodes.map((n, i) => ({
       id: n.id,
-      title: n.title.trim() || "节点 " + (i + 1),
+      title: n.title.trim() || "待办事项 " + (i + 1),
     }));
     try {
       if (isEdit) {
