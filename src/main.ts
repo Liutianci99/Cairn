@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 
 type Priority = "high" | "normal";
+type Page = "projects" | "todos";
 
 interface Milestone {
   id: string;
@@ -20,8 +21,16 @@ interface Project {
   id: string;
   title: string;
   priority: Priority;
+  note?: string;
   position?: number;
   milestones: Milestone[];
+}
+
+interface Todo {
+  id: string;
+  text: string;
+  done: boolean;
+  position?: number;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -39,73 +48,165 @@ const ICON_EDIT =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>';
 const ICON_DELETE =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+// Right-pointing chevron; CSS rotates it 90° to point down when the card is open.
+const CHEVRON =
+  '<svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 1.5 L6 6.5 L2 11.5"/></svg>';
 
-const doneCount = (p: Project) => p.milestones.filter((m) => m.done).length;
 const isComplete = (p: Project) =>
   p.milestones.length > 0 && p.milestones.every((m) => m.done);
 
 // ====================================================================
-// Widget mode — the main desktop panel
+// Widget mode — the main desktop panel (two pages: 项目 / 待办)
 // ====================================================================
 let projects: Project[] = [];
+let todos: Todo[] = [];
+let activePage: Page = "projects";
+const expanded = new Set<string>(); // ids of project cards whose drawer is open
 
-async function reload() {
+// --- Window auto-fit -------------------------------------------------
+// The panel fills the window (height:100vh) and the list scrolls, so opening a
+// drawer used to just clip/scroll inside a fixed window (the 待办 got sliced in
+// half). Instead, only when opening a drawer would overflow the list do we grow
+// the window by exactly the overflow; it shrinks back when the drawer collapses.
+let baseHeight = 0; // resting height (user's grip size) — the floor we return to
+let expectedH = 0; // last height WE set — lets us tell our resizes from the grip
+
+function maxWindowHeight(): number {
+  const avail = window.screen?.availHeight || 1200;
+  const top = window.screenY || 0;
+  return Math.max(320, avail - top - 8);
+}
+
+async function applyWindowHeight(h: number) {
+  const target = Math.round(h);
+  if (Math.abs(target - window.innerHeight) < 2) return; // already there
+  expectedH = target;
+  try {
+    await getCurrentWindow().setSize(new LogicalSize(window.innerWidth, target));
+  } catch {
+    /* not running under Tauri */
+  }
+}
+
+// Resize only when the list actually overflows. We force open drawers to their
+// full height (transitions off) and read the list's scrollHeight vs its visible
+// height: a positive delta = content is clipped, so grow the window by exactly
+// that much (capped at the screen bottom, past which the list scrolls). A
+// negative delta = slack; on collapse/rebuild we shrink it away, never below the
+// resting height. When it already fits, the window doesn't move at all.
+function refitWindow(opening = false) {
+  const panel = document.querySelector<HTMLElement>(".panel");
+  const list = document.querySelector<HTMLElement>(".list");
+  if (!panel || !list) return;
+  panel.classList.add("measuring-drawers");
+  const overflow = list.scrollHeight - list.clientHeight;
+  panel.classList.remove("measuring-drawers");
+  const cur = window.innerHeight;
+  let target = cur;
+  if (overflow > 1) {
+    target = Math.min(cur + overflow, maxWindowHeight()); // clipped → extend to fit
+  } else if (!opening && overflow < -1) {
+    target = Math.max(cur + overflow, baseHeight); // slack on collapse → shrink back
+  }
+  void applyWindowHeight(target);
+}
+
+function initAutoFit() {
+  baseHeight = window.innerHeight;
+  expectedH = window.innerHeight;
+  // A resize we didn't initiate = the user dragged the grip; adopt it as the new
+  // resting height so a collapse returns here instead of the old value.
+  window.addEventListener("resize", () => {
+    if (Math.abs(window.innerHeight - expectedH) > 2) {
+      baseHeight = window.innerHeight;
+      expectedH = window.innerHeight;
+    }
+  });
+}
+
+async function reloadProjects() {
   projects = await invoke<Project[]>("list_projects");
   render();
 }
-
-function buildStepper(p: Project, complete: boolean): HTMLElement {
-  const done = doneCount(p);
-  const total = p.milestones.length;
-  const stepper = el("div", "stepper");
-  for (let i = 0; i < total; i++) {
-    const node = el("button", "node");
-    node.type = "button";
-    node.title = p.milestones[i].title;
-    if (p.milestones[i].done) node.classList.add("done");
-    else if (i === done && !complete) node.classList.add("current");
-    if (complete) node.classList.add("mint");
-    node.addEventListener("click", async () => {
-      const m = p.milestones[i];
-      m.done = !m.done; // optimistic
-      render();
-      try {
-        await invoke("set_milestone_done", { milestoneId: m.id, done: m.done });
-      } catch (e) {
-        console.error("set_milestone_done failed", e);
-        await reload();
-      }
-    });
-    stepper.appendChild(node);
-    if (i < total - 1) {
-      const conn = el("div", "conn");
-      if (p.milestones[i].done && p.milestones[i + 1].done)
-        conn.classList.add("done");
-      if (complete) conn.classList.add("mint");
-      stepper.appendChild(conn);
-    }
-  }
-  return stepper;
+async function reloadTodos() {
+  todos = await invoke<Todo[]>("list_todos");
+  render();
 }
 
+// A project card: a header row (arrow + name + 待办 count) and a collapsible
+// drawer listing the project's 待办事项. The drawer animates open/closed via CSS
+// (grid-template-rows 0fr↔1fr), so the arrow toggles a class rather than
+// re-rendering; expanding pushes the cards below it down (accordion).
 function buildRow(p: Project): HTMLElement {
   const complete = isComplete(p);
-  const row = el("div", "row" + (complete ? " completed" : ""));
+  const open = expanded.has(p.id);
+  const row = el(
+    "div",
+    "row" + (complete ? " completed" : "") + (open ? " expanded" : ""),
+  );
   row.dataset.id = p.id;
 
-  const top = el("div", "row-top");
-  const left = el("div", "row-left");
-  if (complete) {
-    left.appendChild(el("span", "check", "✓"));
-  } else {
-    left.appendChild(el("span", "dot " + p.priority));
-  }
-  left.appendChild(el("span", "row-title", p.title));
-  top.appendChild(left);
-  top.appendChild(el("span", "count", `${doneCount(p)}/${p.milestones.length}`));
+  const head = el("div", "row-head");
 
-  row.appendChild(top);
-  row.appendChild(buildStepper(p, complete));
+  const arrow = el("button", "arrow-btn");
+  arrow.type = "button";
+  arrow.innerHTML = CHEVRON;
+  arrow.title = open ? "收起" : "展开待办";
+  arrow.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const nowOpen = row.classList.toggle("expanded");
+    if (nowOpen) expanded.add(p.id);
+    else expanded.delete(p.id);
+    arrow.title = nowOpen ? "收起" : "展开待办";
+    if (nowOpen) {
+      // grow the window now — but only if the drawer won't fit as-is — so it
+      // animates into real space instead of being clipped by a too-short window
+      refitWindow(true);
+    } else {
+      // shrink only after the drawer has finished collapsing, so the content is
+      // gone before the window contracts (avoids a clipped frame on the way down)
+      const d = row.querySelector<HTMLElement>(".drawer");
+      const onEnd = (ev: TransitionEvent) => {
+        if (ev.propertyName !== "grid-template-rows") return;
+        d?.removeEventListener("transitionend", onEnd);
+        refitWindow();
+      };
+      d?.addEventListener("transitionend", onEnd);
+    }
+  });
+  head.appendChild(arrow);
+
+  head.appendChild(el("span", "row-title", p.title));
+  head.appendChild(el("span", "count", `${p.milestones.length} 待办`));
+  row.appendChild(head);
+
+  // drawer
+  const drawer = el("div", "drawer");
+  const inner = el("div", "drawer-inner");
+  const dtodos = el("div", "drawer-todos");
+  for (const m of p.milestones) {
+    const trow = el("div", "todo-row" + (m.done ? " done" : ""));
+    const check = el("button", "todo-check");
+    check.type = "button";
+    check.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      m.done = !m.done; // optimistic
+      trow.classList.toggle("done", m.done);
+      row.classList.toggle("completed", isComplete(p));
+      try {
+        await invoke("set_milestone_done", { milestoneId: m.id, done: m.done });
+      } catch (err) {
+        console.error("set_milestone_done failed", err);
+        await reloadProjects();
+      }
+    });
+    trow.appendChild(check);
+    trow.appendChild(el("span", "todo-text", m.title));
+    dtodos.appendChild(trow);
+  }
+  inner.appendChild(dtodos);
+  drawer.appendChild(inner);
+  row.appendChild(drawer);
 
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -117,9 +218,9 @@ function buildRow(p: Project): HTMLElement {
 
 // Left-press-and-drag a project card to reorder the list. The card lifts out of
 // flow and follows the cursor while a dashed placeholder marks where it will
-// drop; the new order is persisted (reorder_projects) so it survives reloads. A
-// small movement threshold keeps plain clicks — milestone toggles, the
-// right-click menu — from being read as a drag.
+// drop; the new order is persisted (reorder_projects). A movement threshold
+// keeps plain clicks — the arrow, drawer todos, right-click — from being read as
+// a drag.
 function wireDrag(list: HTMLElement) {
   let candidate: HTMLElement | null = null;
   let dragging: HTMLElement | null = null;
@@ -130,9 +231,7 @@ function wireDrag(list: HTMLElement) {
 
   const positionCard = (clientY: number) => {
     if (!dragging || !placeholder) return;
-    dragging.style.top = clientY - grabOffsetY + "px"; // follow the cursor
-    // slot the placeholder before the first row whose middle is below the
-    // cursor; if none, it lands at the end
+    dragging.style.top = clientY - grabOffsetY + "px";
     let target: HTMLElement | null = null;
     for (const other of list.querySelectorAll<HTMLElement>(".row")) {
       if (other === dragging) continue;
@@ -145,31 +244,27 @@ function wireDrag(list: HTMLElement) {
     list.insertBefore(placeholder, target);
   };
 
-  const beginDrag = (row: HTMLElement, e: MouseEvent) => {
+  const beginDrag = (r: HTMLElement, e: MouseEvent) => {
     started = true;
-    dragging = row;
-    const rect = row.getBoundingClientRect();
+    dragging = r;
+    const rect = r.getBoundingClientRect();
     grabOffsetY = e.clientY - rect.top;
-
     placeholder = document.createElement("div");
     placeholder.className = "row-placeholder";
     placeholder.style.height = rect.height + "px";
-    list.insertBefore(placeholder, row);
-
-    // lift the card out of flow so it can float over everything and follow the
-    // cursor; the placeholder keeps the list from collapsing
-    row.classList.add("dragging");
-    row.style.position = "fixed";
-    row.style.width = rect.width + "px";
-    row.style.left = rect.left + "px";
-    row.style.pointerEvents = "none";
+    list.insertBefore(placeholder, r);
+    r.classList.add("dragging");
+    r.style.position = "fixed";
+    r.style.width = rect.width + "px";
+    r.style.left = rect.left + "px";
+    r.style.pointerEvents = "none";
     positionCard(e.clientY);
   };
 
   const onMove = (e: MouseEvent) => {
     if (!candidate) return;
     if (!started) {
-      if (Math.abs(e.clientY - startY) < 5) return; // ignore tiny jitter
+      if (Math.abs(e.clientY - startY) < 5) return;
       beginDrag(candidate, e);
     } else {
       e.preventDefault();
@@ -182,16 +277,16 @@ function wireDrag(list: HTMLElement) {
     document.removeEventListener("mouseup", onUp);
     const didDrag = started;
     if (dragging && placeholder) {
-      list.insertBefore(dragging, placeholder); // drop where the gap rests
+      list.insertBefore(dragging, placeholder);
       placeholder.remove();
       dragging.classList.remove("dragging");
-      dragging.removeAttribute("style"); // clear the inline float styles
+      dragging.removeAttribute("style");
     }
     candidate = null;
     dragging = null;
     placeholder = null;
     started = false;
-    if (!didDrag) return; // a plain click, not a drag
+    if (!didDrag) return;
     const ids = [...list.querySelectorAll<HTMLElement>(".row")].map(
       (r) => r.dataset.id!,
     );
@@ -200,13 +295,13 @@ function wireDrag(list: HTMLElement) {
     } catch (e) {
       console.error("reorder_projects failed", e);
     }
-    await reload();
+    await reloadProjects();
   };
 
   list.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return; // left button only
+    if (e.button !== 0) return;
     const t = e.target as HTMLElement;
-    if (t.closest(".node")) return; // let milestone toggles work
+    if (t.closest(".arrow-btn") || t.closest(".drawer")) return; // let those interactions work
     const row = t.closest<HTMLElement>(".row");
     if (!row) return;
     candidate = row;
@@ -217,44 +312,99 @@ function wireDrag(list: HTMLElement) {
   });
 }
 
-function render() {
-  const app = document.querySelector<HTMLDivElement>("#app");
-  if (!app) return;
-  app.innerHTML = "";
+function buildHeader(): HTMLElement {
+  const header = el("div", "header");
 
-  app.appendChild(el("div", "backdrop"));
+  const tabs = el("div", "tabs");
+  const mkTab = (key: Page, label: string) => {
+    const t = el("button", "tab" + (activePage === key ? " active" : ""), label);
+    t.type = "button";
+    t.addEventListener("click", () => {
+      if (activePage === key) return;
+      activePage = key;
+      if (key === "todos") void reloadTodos();
+      else void reloadProjects();
+    });
+    return t;
+  };
+  tabs.appendChild(mkTab("projects", "项目"));
+  tabs.appendChild(mkTab("todos", "待办"));
 
+  const add = el("button", "add-btn", "+");
+  add.type = "button";
+  add.title = activePage === "projects" ? "新建项目" : "新增日常待办";
+  add.addEventListener("click", () => {
+    if (activePage === "projects") void openEditor();
+    else addTodoInline();
+  });
+
+  header.appendChild(tabs);
+  header.appendChild(add);
+  return header;
+}
+
+function renderProjectsPage(app: HTMLElement) {
   const ordered = [...projects].sort(
     (a, b) => Number(isComplete(a)) - Number(isComplete(b)),
   );
-  const activeCount = projects.filter((p) => !isComplete(p)).length;
-  const doneProjects = projects.length - activeCount;
+  const list = el("div", "list");
+  if (ordered.length === 0) {
+    list.appendChild(el("div", "empty-hint", "还没有项目,点右上角 + 新建"));
+  }
+  for (const p of ordered) list.appendChild(buildRow(p));
+  app.appendChild(list);
+  wireDrag(list);
+}
+
+function renderTodosPage(app: HTMLElement) {
+  const list = el("div", "list todos-list");
+  list.appendChild(el("div", "todos-cap", "与开发无关的日常事项"));
+  if (todos.length === 0) {
+    list.appendChild(el("div", "empty-hint", "还没有日常待办,点右上角 + 添加"));
+  }
+  for (const t of todos) {
+    const trow = el("div", "todo-row daily" + (t.done ? " done" : ""));
+    trow.dataset.id = t.id;
+    const check = el("button", "todo-check");
+    check.type = "button";
+    check.addEventListener("click", async () => {
+      t.done = !t.done;
+      trow.classList.toggle("done", t.done);
+      try {
+        await invoke("set_todo_done", { todoId: t.id, done: t.done });
+      } catch (e) {
+        console.error("set_todo_done failed", e);
+        await reloadTodos();
+      }
+    });
+    trow.appendChild(check);
+    trow.appendChild(el("span", "todo-text", t.text));
+    trow.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showTodoMenu(e.clientX, e.clientY, t);
+    });
+    list.appendChild(trow);
+  }
+  app.appendChild(list);
+}
+
+function render() {
+  const app = document.querySelector<HTMLDivElement>("#app");
+  if (!app) return;
+  app.className = "panel";
+  app.innerHTML = "";
+
+  app.appendChild(el("div", "backdrop"));
 
   const dragStrip = el("div", "draghandle-strip");
   dragStrip.setAttribute("data-tauri-drag-region", "");
   dragStrip.appendChild(el("div", "draghandle"));
   app.appendChild(dragStrip);
 
-  const header = el("div", "header");
-  const titles = el("div", "titles");
-  titles.appendChild(el("div", "title", "项目"));
-  titles.appendChild(
-    el("div", "subtitle", `进行中 ${activeCount} · 已完成 ${doneProjects}`),
-  );
+  app.appendChild(buildHeader());
 
-  const add = el("button", "add-btn", "+");
-  add.type = "button";
-  add.title = "新建项目";
-  add.addEventListener("click", () => void openEditor());
-
-  header.appendChild(titles);
-  header.appendChild(add);
-  app.appendChild(header);
-
-  const list = el("div", "list");
-  for (const p of ordered) list.appendChild(buildRow(p));
-  app.appendChild(list);
-  wireDrag(list);
+  if (activePage === "projects") renderProjectsPage(app);
+  else renderTodosPage(app);
 
   const grip = el("div", "grip");
   grip.title = "拖拽调整大小";
@@ -267,6 +417,99 @@ function render() {
     }
   });
   app.appendChild(grip);
+
+  // keep window height matched to content after a rebuild (add/delete/reorder,
+  // page switch). Collapsed → resting height; a still-open drawer keeps its room.
+  refitWindow();
+}
+
+// Inline "add daily todo": lift the window so it can take keystrokes, drop an
+// input at the top of the list, create on Enter (and reopen for rapid entry),
+// dismiss on Escape/blur.
+function addTodoInline() {
+  const list = document.querySelector<HTMLElement>(".todos-list");
+  if (!list) return;
+  const existingInput = list.querySelector<HTMLInputElement>(".todo-add-input");
+  if (existingInput) {
+    existingInput.focus();
+    return;
+  }
+
+  const wrap = el("div", "todo-row daily adding");
+  wrap.appendChild(el("span", "todo-check ghost"));
+  const input = document.createElement("input");
+  input.className = "todo-add-input";
+  input.type = "text";
+  input.placeholder = "新日常待办,回车添加";
+  wrap.appendChild(input);
+  const cap = list.querySelector(".todos-cap");
+  list.insertBefore(wrap, cap ? cap.nextSibling : list.firstChild);
+
+  void invoke("set_editing", { editing: true }).catch(() => {});
+  input.focus();
+
+  const done = () => void invoke("set_editing", { editing: false }).catch(() => {});
+  input.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter") {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      try {
+        await invoke("create_todo", { text });
+        await reloadTodos();
+        addTodoInline(); // reopen for the next entry
+      } catch (err) {
+        console.error("create_todo failed", err);
+      }
+    } else if (e.key === "Escape") {
+      done();
+      wrap.remove();
+    }
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (document.activeElement !== input) {
+        done();
+        wrap.remove();
+      }
+    }, 120);
+  });
+}
+
+function showTodoMenu(x: number, y: number, t: Todo) {
+  document.querySelectorAll(".ctx-menu").forEach((m) => m.remove());
+  const menu = el("div", "ctx-menu");
+  const del = el("div", "ctx-item danger");
+  const ico = el("span", "ctx-ico");
+  ico.innerHTML = ICON_DELETE;
+  del.appendChild(ico);
+  del.appendChild(el("span", undefined, "删除"));
+  menu.appendChild(del);
+  document.body.appendChild(menu);
+
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.min(x, window.innerWidth - r.width - 8) + "px";
+  menu.style.top = Math.min(y, window.innerHeight - r.height - 8) + "px";
+
+  const close = () => {
+    menu.remove();
+    document.removeEventListener("mousedown", onDoc);
+  };
+  const onDoc = (e: MouseEvent) => {
+    if (!menu.contains(e.target as Node)) close();
+  };
+  setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
+
+  del.addEventListener("click", async () => {
+    close();
+    try {
+      await invoke("delete_todo", { todoId: t.id });
+      todos = todos.filter((x) => x.id !== t.id);
+      render();
+    } catch (e) {
+      console.error("delete_todo failed", e);
+    }
+  });
 }
 
 function showContextMenu(x: number, y: number, p: Project) {
@@ -428,11 +671,7 @@ function renderEditor(existing?: Project) {
   let priority: Priority = existing?.priority ?? "normal";
   const nodes: { id: string | null; title: string }[] = existing
     ? existing.milestones.map((m) => ({ id: m.id, title: m.title }))
-    : [
-        { id: null, title: "待办事项 1" },
-        { id: null, title: "待办事项 2" },
-        { id: null, title: "待办事项 3" },
-      ];
+    : [{ id: null, title: "待办事项 1" }];
 
   const root = el("div", "editor-root");
   root.appendChild(el("div", "backdrop"));
@@ -477,7 +716,24 @@ function renderEditor(existing?: Project) {
   prioWrap.appendChild(seg);
   root.appendChild(prioWrap);
 
-  // node count
+  // 便签 — a per-project memo that grows in height with its content
+  const memoWrap = el("div", "field");
+  memoWrap.appendChild(el("label", "field-label", "便签"));
+  const memo = document.createElement("textarea");
+  memo.className = "text-area";
+  memo.placeholder = "写点便签…";
+  memo.value = existing?.note ?? "";
+  memo.rows = 3;
+  const growMemo = () => {
+    memo.style.height = "auto";
+    memo.style.height = memo.scrollHeight + "px";
+    void fitWindow();
+  };
+  memo.addEventListener("input", growMemo);
+  memoWrap.appendChild(memo);
+  root.appendChild(memoWrap);
+
+  // 待办事项 count
   const countWrap = el("div", "field");
   countWrap.appendChild(el("label", "field-label", "待办事项数量"));
   const stepperRow = el("div", "stepper-row");
@@ -492,7 +748,7 @@ function renderEditor(existing?: Project) {
   countWrap.appendChild(stepperRow);
   root.appendChild(countWrap);
 
-  // node names
+  // 待办事项 names
   const namesWrap = el("div", "field");
   namesWrap.appendChild(el("label", "field-label", "待办事项命名"));
   const nodesContainer = el("div", "node-inputs");
@@ -546,6 +802,7 @@ function renderEditor(existing?: Project) {
 
   confirm.addEventListener("click", async () => {
     const title = nameInput.value.trim() || (isEdit ? existing!.title : "新项目");
+    const note = memo.value;
     const named = nodes.map((n, i) => ({
       id: n.id,
       title: n.title.trim() || "待办事项 " + (i + 1),
@@ -556,12 +813,14 @@ function renderEditor(existing?: Project) {
           id: existing!.id,
           title,
           priority,
+          note,
           milestones: named,
         });
       } else {
         await invoke("create_project", {
           title,
           priority,
+          note,
           milestones: named.map((n) => n.title),
         });
       }
@@ -572,6 +831,7 @@ function renderEditor(existing?: Project) {
     }
   });
 
+  growMemo();
   nameInput.focus();
 }
 
@@ -585,7 +845,8 @@ window.addEventListener("DOMContentLoaded", () => {
   if (params.get("mode") === "editor") {
     void setupEditor(params);
   } else {
-    void reload();
-    void listen("projects-changed", () => void reload());
+    initAutoFit();
+    void reloadProjects();
+    void listen("projects-changed", () => void reloadProjects());
   }
 });

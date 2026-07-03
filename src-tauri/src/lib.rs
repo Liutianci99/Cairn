@@ -41,10 +41,11 @@ fn create_project(
     state: tauri::State<'_, Mutex<Connection>>,
     title: String,
     priority: String,
+    note: String,
     milestones: Vec<String>,
 ) -> Result<db::Project, String> {
     let conn = state.lock().map_err(|e| e.to_string())?;
-    db::create_project(&conn, &title, &priority, &milestones).map_err(|e| e.to_string())
+    db::create_project(&conn, &title, &priority, &note, &milestones).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -63,10 +64,11 @@ fn update_project(
     id: String,
     title: String,
     priority: String,
+    note: String,
     milestones: Vec<db::MilestoneInput>,
 ) -> Result<db::Project, String> {
     let conn = state.lock().map_err(|e| e.to_string())?;
-    db::update_project(&conn, &id, &title, &priority, &milestones).map_err(|e| e.to_string())
+    db::update_project(&conn, &id, &title, &priority, &note, &milestones).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -82,6 +84,37 @@ fn reorder_projects(
 ) -> Result<(), String> {
     let conn = state.lock().map_err(|e| e.to_string())?;
     db::reorder_projects(&conn, &ordered_ids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_todos(state: tauri::State<'_, Mutex<Connection>>) -> Result<Vec<db::Todo>, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::list_todos(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn create_todo(
+    state: tauri::State<'_, Mutex<Connection>>,
+    text: String,
+) -> Result<db::Todo, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::create_todo(&conn, &text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_todo_done(
+    state: tauri::State<'_, Mutex<Connection>>,
+    todo_id: String,
+    done: bool,
+) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::set_todo_done(&conn, &todo_id, done).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_todo(state: tauri::State<'_, Mutex<Connection>>, todo_id: String) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::delete_todo(&conn, &todo_id).map_err(|e| e.to_string())
 }
 
 /// Pin the window to the desktop bottom layer (never above other windows). When
@@ -145,7 +178,11 @@ pub fn run() {
             update_project,
             delete_project,
             set_editing,
-            reorder_projects
+            reorder_projects,
+            list_todos,
+            create_todo,
+            set_todo_done,
+            delete_todo
         ])
         .setup(|app| {
             // Open the local SQLite database and hand it to Tauri's managed state
