@@ -6,6 +6,7 @@ import {
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 type Priority = "high" | "normal";
 type Page = "projects" | "todos";
@@ -22,6 +23,7 @@ interface Project {
   title: string;
   priority: Priority;
   note?: string;
+  path?: string;
   position?: number;
   milestones: Milestone[];
 }
@@ -44,6 +46,8 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return n;
 }
 
+const ICON_OPEN =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17V5a1 1 0 0 1 1-1h4l2 2h6a1 1 0 0 1 1 1v2"/><path d="M3 9h16l-2 9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z"/></svg>';
 const ICON_EDIT =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>';
 const ICON_DELETE =
@@ -524,8 +528,15 @@ function showContextMenu(x: number, y: number, p: Project) {
     it.appendChild(el("span", undefined, label));
     return it;
   };
+  const hasPath = !!p.path && p.path.trim().length > 0;
+  const openIt = item(ICON_OPEN, "打开");
+  if (!hasPath) {
+    openIt.classList.add("disabled");
+    openIt.title = "未设置仓库路径，先在「编辑」里填写";
+  }
   const edit = item(ICON_EDIT, "编辑");
   const del = item(ICON_DELETE, "删除", true);
+  menu.appendChild(openIt);
   menu.appendChild(edit);
   menu.appendChild(del);
   document.body.appendChild(menu);
@@ -549,6 +560,16 @@ function showContextMenu(x: number, y: number, p: Project) {
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
   }, 0);
+
+  openIt.addEventListener("click", async () => {
+    if (!hasPath) return;
+    close();
+    try {
+      await invoke("open_in_terminal", { path: p.path, title: p.title });
+    } catch (e) {
+      console.error("open_in_terminal failed", e);
+    }
+  });
 
   edit.addEventListener("click", () => {
     close();
@@ -690,6 +711,35 @@ function renderEditor(existing?: Project) {
   nameWrap.appendChild(nameInput);
   root.appendChild(nameWrap);
 
+  // 仓库路径 — the project's working directory. "打开" opens a terminal here and
+  // resumes the last Claude session. A folder picker fills the input; it stays
+  // editable so a path can also be pasted.
+  const pathWrap = el("div", "field");
+  pathWrap.appendChild(el("label", "field-label", "仓库路径"));
+  const pathRow = el("div", "path-row");
+  const pathInput = document.createElement("input");
+  pathInput.className = "text-input";
+  pathInput.type = "text";
+  pathInput.placeholder = "例如 D:\\git_repository\\Cairn";
+  pathInput.value = existing?.path ?? "";
+  const pickBtn = el("button", "path-pick", "选择");
+  pickBtn.type = "button";
+  pickBtn.addEventListener("click", async () => {
+    try {
+      const picked = await openDialog({
+        directory: true,
+        defaultPath: pathInput.value || undefined,
+      });
+      if (typeof picked === "string") pathInput.value = picked;
+    } catch (e) {
+      console.error("folder pick failed", e);
+    }
+  });
+  pathRow.appendChild(pathInput);
+  pathRow.appendChild(pickBtn);
+  pathWrap.appendChild(pathRow);
+  root.appendChild(pathWrap);
+
   // priority
   const prioWrap = el("div", "field");
   prioWrap.appendChild(el("label", "field-label", "优先级"));
@@ -803,6 +853,7 @@ function renderEditor(existing?: Project) {
   confirm.addEventListener("click", async () => {
     const title = nameInput.value.trim() || (isEdit ? existing!.title : "新项目");
     const note = memo.value;
+    const path = pathInput.value.trim();
     const named = nodes.map((n, i) => ({
       id: n.id,
       title: n.title.trim() || "待办事项 " + (i + 1),
@@ -814,6 +865,7 @@ function renderEditor(existing?: Project) {
           title,
           priority,
           note,
+          path,
           milestones: named,
         });
       } else {
@@ -821,6 +873,7 @@ function renderEditor(existing?: Project) {
           title,
           priority,
           note,
+          path,
           milestones: named.map((n) => n.title),
         });
       }

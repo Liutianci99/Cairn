@@ -19,6 +19,7 @@ pub struct Project {
     pub title: String,
     pub priority: String,
     pub note: String,
+    pub path: String,
     pub position: i64,
     pub milestones: Vec<Milestone>,
 }
@@ -60,6 +61,7 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
              priority   TEXT NOT NULL,
              position   INTEGER NOT NULL,
              note       TEXT NOT NULL DEFAULT '',
+             path       TEXT NOT NULL DEFAULT '',
              updated_at INTEGER NOT NULL
          );
          CREATE TABLE IF NOT EXISTS milestones (
@@ -77,10 +79,14 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
              created_at INTEGER NOT NULL
          );",
     )?;
-    // Migrate DBs created before the `note` column existed. The error when the
-    // column is already present (newer DBs) is expected and ignored.
+    // Migrate DBs created before the `note` / `path` columns existed. The error
+    // when a column is already present (newer DBs) is expected and ignored.
     let _ = conn.execute(
         "ALTER TABLE projects ADD COLUMN note TEXT NOT NULL DEFAULT ''",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE projects ADD COLUMN path TEXT NOT NULL DEFAULT ''",
         [],
     );
     Ok(())
@@ -89,7 +95,7 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
 /// All projects ordered by `position`, each with its milestones ordered by `position`.
 pub fn list_projects(conn: &Connection) -> rusqlite::Result<Vec<Project>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, priority, note, position FROM projects ORDER BY position ASC",
+        "SELECT id, title, priority, note, path, position FROM projects ORDER BY position ASC",
     )?;
     let mut projects: Vec<Project> = stmt
         .query_map([], |row| {
@@ -98,7 +104,8 @@ pub fn list_projects(conn: &Connection) -> rusqlite::Result<Vec<Project>> {
                 title: row.get(1)?,
                 priority: row.get(2)?,
                 note: row.get(3)?,
-                position: row.get(4)?,
+                path: row.get(4)?,
+                position: row.get(5)?,
                 milestones: Vec::new(),
             })
         })?
@@ -129,14 +136,15 @@ pub fn create_project(
     title: &str,
     priority: &str,
     note: &str,
+    path: &str,
     milestone_titles: &[String],
 ) -> rusqlite::Result<Project> {
     let id = uuid::Uuid::new_v4().to_string();
     let position: i64 =
         conn.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM projects", [], |r| r.get(0))?;
     conn.execute(
-        "INSERT INTO projects (id, title, priority, position, note, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![id, title, priority, position, note, now_ts()],
+        "INSERT INTO projects (id, title, priority, position, note, path, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![id, title, priority, position, note, path, now_ts()],
     )?;
 
     let mut milestones = Vec::with_capacity(milestone_titles.len());
@@ -155,6 +163,7 @@ pub fn create_project(
         title: title.to_string(),
         priority: priority.to_string(),
         note: note.to_string(),
+        path: path.to_string(),
         position,
         milestones,
     })
@@ -179,12 +188,13 @@ pub fn update_project(
     title: &str,
     priority: &str,
     note: &str,
+    path: &str,
     milestones: &[MilestoneInput],
 ) -> rusqlite::Result<Project> {
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "UPDATE projects SET title = ?1, priority = ?2, note = ?3, updated_at = ?4 WHERE id = ?5",
-        params![title, priority, note, now_ts(), id],
+        "UPDATE projects SET title = ?1, priority = ?2, note = ?3, path = ?4, updated_at = ?5 WHERE id = ?6",
+        params![title, priority, note, path, now_ts(), id],
     )?;
 
     let existing: Vec<String> = {
@@ -316,7 +326,7 @@ mod tests {
     fn created_project_round_trips_with_milestones_in_order() {
         let c = mem();
         let titles = vec!["立项".to_string(), "数据层".to_string(), "联调".to_string()];
-        let created = create_project(&c, "测试项目", "high", "", &titles).unwrap();
+        let created = create_project(&c, "测试项目", "high", "", "", &titles).unwrap();
 
         let all = list_projects(&c).unwrap();
         assert_eq!(all.len(), 1);
@@ -333,7 +343,7 @@ mod tests {
     #[test]
     fn set_milestone_done_persists_per_milestone() {
         let c = mem();
-        let p = create_project(&c, "P", "normal", "", &["a".into(), "b".into()]).unwrap();
+        let p = create_project(&c, "P", "normal", "", "", &["a".into(), "b".into()]).unwrap();
         let first = p.milestones[0].id.clone();
 
         set_milestone_done(&c, &first, true).unwrap();
@@ -348,8 +358,8 @@ mod tests {
     #[test]
     fn projects_returned_in_insertion_order() {
         let c = mem();
-        create_project(&c, "first", "normal", "", &[]).unwrap();
-        create_project(&c, "second", "normal", "", &[]).unwrap();
+        create_project(&c, "first", "normal", "", "", &[]).unwrap();
+        create_project(&c, "second", "normal", "", "", &[]).unwrap();
         let all = list_projects(&c).unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].title, "first");
@@ -359,7 +369,7 @@ mod tests {
     #[test]
     fn update_project_reconciles_milestones_and_preserves_done() {
         let c = mem();
-        let p = create_project(&c, "P", "normal", "", &["a".into(), "b".into(), "c".into()]).unwrap();
+        let p = create_project(&c, "P", "normal", "", "", &["a".into(), "b".into(), "c".into()]).unwrap();
         let b_id = p.milestones[1].id.clone();
         set_milestone_done(&c, &b_id, true).unwrap();
 
@@ -369,7 +379,7 @@ mod tests {
             MilestoneInput { id: Some(b_id.clone()), title: "b".into() },
             MilestoneInput { id: None, title: "d".into() },
         ];
-        let updated = update_project(&c, &p.id, "P2", "high", "", &desired).unwrap();
+        let updated = update_project(&c, &p.id, "P2", "high", "", "", &desired).unwrap();
         assert_eq!(updated.title, "P2");
         assert_eq!(updated.priority, "high");
 
@@ -390,18 +400,18 @@ mod tests {
     #[test]
     fn project_note_persists() {
         let c = mem();
-        let p = create_project(&c, "P", "normal", "初始便签", &[]).unwrap();
+        let p = create_project(&c, "P", "normal", "初始便签", "", &[]).unwrap();
         assert_eq!(p.note, "初始便签");
         assert_eq!(list_projects(&c).unwrap()[0].note, "初始便签");
-        update_project(&c, &p.id, "P", "normal", "改后便签", &[]).unwrap();
+        update_project(&c, &p.id, "P", "normal", "改后便签", "", &[]).unwrap();
         assert_eq!(list_projects(&c).unwrap()[0].note, "改后便签");
     }
 
     #[test]
     fn delete_project_removes_project_and_its_milestones() {
         let c = mem();
-        let keep = create_project(&c, "keep", "normal", "", &["x".into()]).unwrap();
-        let gone = create_project(&c, "gone", "normal", "", &["y".into(), "z".into()]).unwrap();
+        let keep = create_project(&c, "keep", "normal", "", "", &["x".into()]).unwrap();
+        let gone = create_project(&c, "gone", "normal", "", "", &["y".into(), "z".into()]).unwrap();
 
         delete_project(&c, &gone.id).unwrap();
 
@@ -423,9 +433,9 @@ mod tests {
     #[test]
     fn reorder_projects_persists_new_order() {
         let c = mem();
-        let a = create_project(&c, "A", "normal", "", &[]).unwrap();
-        let b = create_project(&c, "B", "normal", "", &[]).unwrap();
-        let d = create_project(&c, "C", "normal", "", &[]).unwrap();
+        let a = create_project(&c, "A", "normal", "", "", &[]).unwrap();
+        let b = create_project(&c, "B", "normal", "", "", &[]).unwrap();
+        let d = create_project(&c, "C", "normal", "", "", &[]).unwrap();
 
         let before: Vec<String> =
             list_projects(&c).unwrap().into_iter().map(|p| p.title).collect();
@@ -436,6 +446,23 @@ mod tests {
         let after: Vec<String> =
             list_projects(&c).unwrap().into_iter().map(|p| p.title).collect();
         assert_eq!(after, ["C", "A", "B"]);
+    }
+
+    #[test]
+    fn created_project_persists_path() {
+        let c = mem();
+        let p = create_project(&c, "P", "normal", "", r"D:\repos\P", &[]).unwrap();
+        assert_eq!(p.path, r"D:\repos\P");
+        assert_eq!(list_projects(&c).unwrap()[0].path, r"D:\repos\P");
+    }
+
+    #[test]
+    fn project_path_defaults_empty_and_updates() {
+        let c = mem();
+        let p = create_project(&c, "P", "normal", "", "", &[]).unwrap();
+        assert_eq!(p.path, "");
+        update_project(&c, &p.id, "P", "normal", "", r"C:\code\P", &[]).unwrap();
+        assert_eq!(list_projects(&c).unwrap()[0].path, r"C:\code\P");
     }
 
     #[test]
