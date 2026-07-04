@@ -513,6 +513,33 @@ body {
   border-color: rgba(153, 168, 255, 0.55);
   background: rgba(255, 255, 255, 0.09);
 }
+/* 仓库路径 row — the path input grows, the picker button hugs the right */
+.path-row {
+  display: flex;
+  gap: 8px;
+}
+.path-row .text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.path-pick {
+  flex: 0 0 auto;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+.path-pick:hover {
+  border-color: rgba(153, 168, 255, 0.55);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+}
 /* 便签 memo — auto-grows in height (JS sets height to scrollHeight on input) */
 .text-area {
   width: 100%;
@@ -676,6 +703,13 @@ body {
 }
 .ctx-item.danger {
   color: #ff7066;
+}
+.ctx-item.disabled {
+  color: rgba(255, 255, 255, 0.32);
+  cursor: not-allowed;
+}
+.ctx-item.disabled:hover {
+  background: transparent;
 }
 .ctx-ico {
   display: inline-flex;
