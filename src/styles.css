@@ -382,7 +382,9 @@ body {
   display: block;
 }
 
-/* todo rows — shared by the project drawer and the 待办 page */
+/* todo rows — the project card's drawer. The 待办 page's daily todos are not
+   these: they wear the .row / .row-head card shell instead, so .todo-check is
+   the only piece the two share. */
 .todo-row {
   display: flex;
   align-items: center;
@@ -406,7 +408,8 @@ body {
   border-style: dashed;
   cursor: default;
 }
-.todo-row.done .todo-check {
+.todo-row.done .todo-check,
+.row.daily.completed .todo-check {
   background: var(--mint);
   border-color: transparent;
 }
@@ -419,17 +422,18 @@ body {
   text-decoration: line-through;
 }
 
-/* 待办 page (standalone daily todos) */
-.todos-list {
-  gap: 5px;
-}
+/* 待办 page (standalone daily todos). The cards themselves need no rules here —
+   .row / .row-head carry the whole look, which is the point: one definition, so
+   the two pages can't drift apart. */
 .todos-cap {
   font-size: 11px;
   color: var(--text-dim);
   padding: 0 2px 6px;
 }
-.todo-row.daily {
-  padding: 5px 2px;
+/* the inline add card wears .row for looks only — it has no id and can't be
+   reordered, so it must not offer .row's grab cursor */
+.row.adding {
+  cursor: default;
 }
 .todo-add-input {
   flex: 1;
@@ -438,7 +442,7 @@ body {
   border: none;
   outline: none;
   color: var(--text-strong);
-  font-size: 13.5px;
+  font-size: 15px;
   font-family: inherit;
 }
 .todo-add-input::placeholder {

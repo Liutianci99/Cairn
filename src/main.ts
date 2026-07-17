@@ -220,12 +220,16 @@ function buildRow(p: Project): HTMLElement {
   return row;
 }
 
-// Left-press-and-drag a project card to reorder the list. The card lifts out of
-// flow and follows the cursor while a dashed placeholder marks where it will
-// drop; the new order is persisted (reorder_projects). A movement threshold
-// keeps plain clicks — the arrow, drawer todos, right-click — from being read as
-// a drag.
-function wireDrag(list: HTMLElement) {
+// Left-press-and-drag a card to reorder the list — shared by both pages, which
+// differ only in the command that persists the order and the reload that follows.
+// The card lifts out of flow and follows the cursor while a dashed placeholder
+// marks where it will drop. A movement threshold keeps plain clicks — the arrow,
+// drawer todos, a 待办 checkbox, right-click — from being read as a drag.
+function wireDrag(
+  list: HTMLElement,
+  command: "reorder_projects" | "reorder_todos",
+  reload: () => Promise<void>,
+) {
   let candidate: HTMLElement | null = null;
   let dragging: HTMLElement | null = null;
   let placeholder: HTMLElement | null = null;
@@ -237,7 +241,7 @@ function wireDrag(list: HTMLElement) {
     if (!dragging || !placeholder) return;
     dragging.style.top = clientY - grabOffsetY + "px";
     let target: HTMLElement | null = null;
-    for (const other of list.querySelectorAll<HTMLElement>(".row")) {
+    for (const other of list.querySelectorAll<HTMLElement>(".row[data-id]")) {
       if (other === dragging) continue;
       const r = other.getBoundingClientRect();
       if (clientY < r.top + r.height / 2) {
@@ -291,23 +295,26 @@ function wireDrag(list: HTMLElement) {
     placeholder = null;
     started = false;
     if (!didDrag) return;
-    const ids = [...list.querySelectorAll<HTMLElement>(".row")].map(
+    const ids = [...list.querySelectorAll<HTMLElement>(".row[data-id]")].map(
       (r) => r.dataset.id!,
     );
     try {
-      await invoke("reorder_projects", { orderedIds: ids });
+      await invoke(command, { orderedIds: ids });
     } catch (e) {
-      console.error("reorder_projects failed", e);
+      console.error(command + " failed", e);
     }
-    await reloadProjects();
+    await reload();
   };
 
   list.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     const t = e.target as HTMLElement;
-    if (t.closest(".arrow-btn") || t.closest(".drawer")) return; // let those interactions work
+    // let those interactions work rather than starting a drag
+    if (t.closest(".arrow-btn") || t.closest(".drawer") || t.closest(".todo-check"))
+      return;
     const row = t.closest<HTMLElement>(".row");
-    if (!row) return;
+    // no id = the inline "add 待办" card, which isn't a real row and can't reorder
+    if (!row || !row.dataset.id) return;
     candidate = row;
     startY = e.clientY;
     started = false;
@@ -357,39 +364,50 @@ function renderProjectsPage(app: HTMLElement) {
   }
   for (const p of ordered) list.appendChild(buildRow(p));
   app.appendChild(list);
-  wireDrag(list);
+  wireDrag(list, "reorder_projects", reloadProjects);
 }
 
+// A daily todo card. It wears the same .row / .row-head shell as a project card,
+// so the size, radius and 浮光 hover come from one shared rule instead of a
+// parallel copy that could drift.
 function renderTodosPage(app: HTMLElement) {
+  const ordered = [...todos].sort((a, b) => Number(a.done) - Number(b.done));
   const list = el("div", "list todos-list");
   list.appendChild(el("div", "todos-cap", "与开发无关的日常事项"));
-  if (todos.length === 0) {
+  if (ordered.length === 0) {
     list.appendChild(el("div", "empty-hint", "还没有日常待办,点右上角 + 添加"));
   }
-  for (const t of todos) {
-    const trow = el("div", "todo-row daily" + (t.done ? " done" : ""));
-    trow.dataset.id = t.id;
+  for (const t of ordered) {
+    const row = el("div", "row daily" + (t.done ? " completed" : ""));
+    row.dataset.id = t.id;
+
+    const head = el("div", "row-head");
     const check = el("button", "todo-check");
     check.type = "button";
-    check.addEventListener("click", async () => {
-      t.done = !t.done;
-      trow.classList.toggle("done", t.done);
+    check.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      t.done = !t.done; // optimistic — strike through now, re-sort after the write
+      row.classList.toggle("completed", t.done);
       try {
         await invoke("set_todo_done", { todoId: t.id, done: t.done });
-      } catch (e) {
-        console.error("set_todo_done failed", e);
+        render(); // done sinks / undone rises to its new place
+      } catch (err) {
+        console.error("set_todo_done failed", err);
         await reloadTodos();
       }
     });
-    trow.appendChild(check);
-    trow.appendChild(el("span", "todo-text", t.text));
-    trow.addEventListener("contextmenu", (e) => {
+    head.appendChild(check);
+    head.appendChild(el("span", "row-title", t.text));
+    row.appendChild(head);
+
+    row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       showTodoMenu(e.clientX, e.clientY, t);
     });
-    list.appendChild(trow);
+    list.appendChild(row);
   }
   app.appendChild(list);
+  wireDrag(list, "reorder_todos", reloadTodos);
 }
 
 function render() {
@@ -439,13 +457,17 @@ function addTodoInline() {
     return;
   }
 
-  const wrap = el("div", "todo-row daily adding");
-  wrap.appendChild(el("span", "todo-check ghost"));
+  // same card shell as a real todo, minus a data-id — that's what keeps wireDrag
+  // from treating this placeholder card as a reorderable row
+  const wrap = el("div", "row daily adding");
+  const head = el("div", "row-head");
+  head.appendChild(el("span", "todo-check ghost"));
   const input = document.createElement("input");
   input.className = "todo-add-input";
   input.type = "text";
   input.placeholder = "新日常待办,回车添加";
-  wrap.appendChild(input);
+  head.appendChild(input);
+  wrap.appendChild(head);
   const cap = list.querySelector(".todos-cap");
   list.insertBefore(wrap, cap ? cap.nextSibling : list.firstChild);
 
