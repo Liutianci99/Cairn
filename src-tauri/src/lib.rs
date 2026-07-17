@@ -123,6 +123,15 @@ fn delete_todo(state: tauri::State<'_, Mutex<Connection>>, todo_id: String) -> R
     db::delete_todo(&conn, &todo_id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn reorder_todos(
+    state: tauri::State<'_, Mutex<Connection>>,
+    ordered_ids: Vec<String>,
+) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    db::reorder_todos(&conn, &ordered_ids).map_err(|e| e.to_string())
+}
+
 /// Pin the window to the desktop bottom layer (never above other windows). When
 /// `pinned`, the window is non-activating and sits at the bottom of the z-order;
 /// when not, it can come forward and take keyboard focus (needed to type in the
@@ -263,7 +272,8 @@ pub fn run() {
             list_todos,
             create_todo,
             set_todo_done,
-            delete_todo
+            delete_todo,
+            reorder_todos
         ])
         .setup(|app| {
             // Open the local SQLite database and hand it to Tauri's managed state

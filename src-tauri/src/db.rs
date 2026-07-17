@@ -306,6 +306,22 @@ pub fn delete_todo(conn: &Connection, todo_id: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// Persist a new top-to-bottom ordering of daily todos — the `reorder_projects`
+/// counterpart for the 待办 page. `ordered_ids` is the full list of todo ids in
+/// the desired order; each todo's `position` is set to its index, so a later
+/// `list_todos` returns them in this order.
+pub fn reorder_todos(conn: &Connection, ordered_ids: &[String]) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    for (i, id) in ordered_ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE todos SET position = ?1 WHERE id = ?2",
+            params![i as i64, id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +500,23 @@ mod tests {
         let rest = list_todos(&c).unwrap();
         assert_eq!(rest.len(), 1);
         assert_eq!(rest[0].id, a.id);
+    }
+
+    #[test]
+    fn reorder_todos_persists_new_order() {
+        let c = mem();
+        let a = create_todo(&c, "买菜").unwrap();
+        let b = create_todo(&c, "还信用卡").unwrap();
+        let d = create_todo(&c, "交房租").unwrap();
+
+        let before: Vec<String> =
+            list_todos(&c).unwrap().into_iter().map(|t| t.text).collect();
+        assert_eq!(before, ["买菜", "还信用卡", "交房租"]);
+
+        reorder_todos(&c, &[d.id.clone(), a.id.clone(), b.id.clone()]).unwrap();
+
+        let after: Vec<String> =
+            list_todos(&c).unwrap().into_iter().map(|t| t.text).collect();
+        assert_eq!(after, ["交房租", "买菜", "还信用卡"]);
     }
 }
