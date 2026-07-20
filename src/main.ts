@@ -743,6 +743,23 @@ async function fitWindow() {
   }
 }
 
+// Windows「复制文件地址」hands you the path already wrapped in double quotes, and
+// a quoted path is not a path — 打开 would fail on it. Strip one *matching* pair
+// so a path that legitimately contains a quote (D:\John's repo) is left alone.
+const QUOTE_PAIRS: Record<string, string> = {
+  '"': '"',
+  "'": "'",
+  "“": "”", // “ ”
+  "‘": "’", // ‘ ’
+};
+
+function normalizePath(raw: string): string {
+  const s = raw.trim();
+  if (s.length < 2) return s;
+  const close = QUOTE_PAIRS[s[0]];
+  return close && s.endsWith(close) ? s.slice(1, -1).trim() : s;
+}
+
 function renderEditor(existing?: Project) {
   const app = document.querySelector<HTMLDivElement>("#app");
   if (!app) return;
@@ -782,7 +799,13 @@ function renderEditor(existing?: Project) {
   pathInput.className = "text-input";
   pathInput.type = "text";
   pathInput.placeholder = "例如 D:\\git_repository\\Cairn";
-  pathInput.value = existing?.path ?? "";
+  // normalize on the way in too, so a project saved with quotes before this
+  // existed cleans itself up the next time it's edited
+  pathInput.value = normalizePath(existing?.path ?? "");
+  // strip as soon as focus leaves, so what you see is what gets stored
+  pathInput.addEventListener("blur", () => {
+    pathInput.value = normalizePath(pathInput.value);
+  });
   const pickBtn = el("button", "path-pick", "选择");
   pickBtn.type = "button";
   pickBtn.addEventListener("click", async () => {
@@ -914,7 +937,7 @@ function renderEditor(existing?: Project) {
   confirm.addEventListener("click", async () => {
     const title = nameInput.value.trim() || (isEdit ? existing!.title : "新项目");
     const note = memo.value;
-    const path = pathInput.value.trim();
+    const path = normalizePath(pathInput.value);
     const named = nodes.map((n, i) => ({
       id: n.id,
       title: n.title.trim() || "待办事项 " + (i + 1),
