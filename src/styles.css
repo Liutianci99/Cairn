@@ -267,14 +267,17 @@ body {
   box-shadow: 0 6px 26px rgba(var(--glow), 0.32),
     0 18px 34px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.34);
 }
-.row.completed {
+/* 完成态压暗 —— 归档页除外。那一页整页都是完成态,统一压暗只会让页面发糊,
+   所以那里的卡片保持项目页的正常亮度与蓝色浮光 hover。收窄选择器而不是另写
+   一套覆盖规则:亮态只有 .row 一个定义,两页不会各改各的。 */
+.list:not(.archive-list) .row.completed {
   opacity: 0.45;
 }
-.row.completed:hover {
+.list:not(.archive-list) .row.completed:hover {
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.5),
     inset 0 1px 1px rgba(255, 255, 255, 0.28);
 }
-.row.completed .row-title {
+.list:not(.archive-list) .row.completed .row-title {
   text-decoration: line-through;
 }
 /* card being dragged to reorder — lifted out of flow (position:fixed set inline)

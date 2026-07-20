@@ -9,7 +9,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 type Priority = "high" | "normal";
-type Page = "projects" | "todos";
+type Page = "projects" | "todos" | "archive";
 
 interface Milestone {
   id: string;
@@ -220,15 +220,21 @@ function buildRow(p: Project): HTMLElement {
   return row;
 }
 
-// Left-press-and-drag a card to reorder the list — shared by both pages, which
+// Left-press-and-drag a card to reorder the list — shared by every page, which
 // differ only in the command that persists the order and the reload that follows.
 // The card lifts out of flow and follows the cursor while a dashed placeholder
 // marks where it will drop. A movement threshold keeps plain clicks — the arrow,
 // drawer todos, a 待办 checkbox, right-click — from being read as a drag.
+//
+// `fullOrder` widens this page's new order into the whole list the command must
+// persist. 项目 and 归档 are two views over one `projects` table, so a page that
+// sent only its own ids would number them from 0 and collide with the other
+// page's positions; each passes the other's ids through instead.
 function wireDrag(
   list: HTMLElement,
   command: "reorder_projects" | "reorder_todos",
   reload: () => Promise<void>,
+  fullOrder: (pageIds: string[]) => string[] = (ids) => ids,
 ) {
   let candidate: HTMLElement | null = null;
   let dragging: HTMLElement | null = null;
@@ -299,7 +305,7 @@ function wireDrag(
       (r) => r.dataset.id!,
     );
     try {
-      await invoke(command, { orderedIds: ids });
+      await invoke(command, { orderedIds: fullOrder(ids) });
     } catch (e) {
       console.error(command + " failed", e);
     }
@@ -340,31 +346,63 @@ function buildHeader(): HTMLElement {
   };
   tabs.appendChild(mkTab("projects", "项目"));
   tabs.appendChild(mkTab("todos", "待办"));
-
-  const add = el("button", "add-btn", "+");
-  add.type = "button";
-  add.title = activePage === "projects" ? "新建项目" : "新增日常待办";
-  add.addEventListener("click", () => {
-    if (activePage === "projects") void openEditor();
-    else addTodoInline();
-  });
-
+  tabs.appendChild(mkTab("archive", "归档"));
   header.appendChild(tabs);
-  header.appendChild(add);
+
+  // 归档 only ever shows projects that finished elsewhere — there is no such
+  // thing as creating one here, so that page gets no + at all.
+  if (activePage !== "archive") {
+    const add = el("button", "add-btn", "+");
+    add.type = "button";
+    add.title = activePage === "projects" ? "新建项目" : "新增日常待办";
+    add.addEventListener("click", () => {
+      if (activePage === "projects") void openEditor();
+      else addTodoInline();
+    });
+    header.appendChild(add);
+  }
   return header;
 }
 
+const isArchived = isComplete; // 归档 = 全部待办打勾,没有第二种状态
+
+// The active worklist. Finished projects aren't sunk to the bottom any more —
+// they leave for 归档 entirely.
 function renderProjectsPage(app: HTMLElement) {
-  const ordered = [...projects].sort(
-    (a, b) => Number(isComplete(a)) - Number(isComplete(b)),
-  );
+  const active = projects.filter((p) => !isArchived(p));
   const list = el("div", "list");
-  if (ordered.length === 0) {
-    list.appendChild(el("div", "empty-hint", "还没有项目,点右上角 + 新建"));
+  if (active.length === 0) {
+    // an empty worklist with projects behind it means they all archived —
+    // saying 还没有项目 there would read like the data went missing
+    const hint =
+      projects.length > 0
+        ? "项目都完成了,在「归档」里"
+        : "还没有项目,点右上角 + 新建";
+    list.appendChild(el("div", "empty-hint", hint));
   }
-  for (const p of ordered) list.appendChild(buildRow(p));
+  for (const p of active) list.appendChild(buildRow(p));
   app.appendChild(list);
-  wireDrag(list, "reorder_projects", reloadProjects);
+  wireDrag(list, "reorder_projects", reloadProjects, (ids) => [
+    ...ids,
+    ...projects.filter(isArchived).map((p) => p.id),
+  ]);
+}
+
+// 归档页 — the finished projects. Cards come straight out of buildRow, the same
+// function the 项目 page uses, so size, drawer, right-click menu and 浮光 hover
+// are identical by construction rather than by a parallel copy that could drift.
+function renderArchivePage(app: HTMLElement) {
+  const archived = projects.filter(isArchived);
+  const list = el("div", "list archive-list");
+  if (archived.length === 0) {
+    list.appendChild(el("div", "empty-hint", "还没有已完成的项目"));
+  }
+  for (const p of archived) list.appendChild(buildRow(p));
+  app.appendChild(list);
+  wireDrag(list, "reorder_projects", reloadProjects, (ids) => [
+    ...projects.filter((p) => !isArchived(p)).map((p) => p.id),
+    ...ids,
+  ]);
 }
 
 // A daily todo card. It wears the same .row / .row-head shell as a project card,
@@ -425,8 +463,9 @@ function render() {
 
   app.appendChild(buildHeader());
 
-  if (activePage === "projects") renderProjectsPage(app);
-  else renderTodosPage(app);
+  if (activePage === "todos") renderTodosPage(app);
+  else if (activePage === "archive") renderArchivePage(app);
+  else renderProjectsPage(app);
 
   const grip = el("div", "grip");
   grip.title = "拖拽调整大小";
